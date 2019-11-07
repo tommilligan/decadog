@@ -1,76 +1,107 @@
-use std::fmt;
+use github_rs::client::{Executor, Github};
+use github_rs::StatusCode;
+use reqwest::header::{HeaderMap, AUTHORIZATION};
+use reqwest::Client as ReqwestClient;
+use serde::de::DeserializeOwned;
+use serde_derive::Deserialize;
 
-use serde_derive::{Deserialize, Serialize};
+mod core;
 
-pub trait AssignedTo<T> {
-    fn assigned_to(&self, assignable: &T) -> bool;
+pub use crate::core::{AssignedTo, Issue, IssuePatch, Milestone};
+
+pub struct Client {
+    github_client: Github,
+    reqwest_client: ReqwestClient,
+    reqwest_headers: HeaderMap,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct Milestone {
-    pub id: u32,
-    pub number: u32,
-    pub title: String,
-    pub state: String,
-}
+trait TryExecute: Executor {
+    fn try_execute<'de, T>(self) -> Result<T, String>
+    where
+        Self: Sized,
+        T: DeserializeOwned,
+    {
+        #[derive(Deserialize)]
+        struct GithubError {
+            message: String,
+        }
 
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct Issue {
-    pub id: u32,
-    pub number: u32,
-    pub state: String,
-    pub title: String,
-    pub milestone: Option<Milestone>,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct IssuePatch {
-    pub milestone: u32,
-}
-
-impl fmt::Display for Milestone {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.title, self.state)
-    }
-}
-
-impl fmt::Display for Issue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(milestone) = &self.milestone {
-            write!(
-                f,
-                "{} ({}) [{}]: {}",
-                self.number, self.state, milestone.title, self.title
-            )
-        } else {
-            write!(f, "{} ({}): {}", self.number, self.state, self.title)
+        match self.execute() {
+            Ok((_, StatusCode::OK, Some(response))) => serde_json::from_value::<T>(response)
+                .map_err(|err| format!("Failed to parse value response: {}", err))
+                .and_then(|value| Ok(value)),
+            Ok((_, _, Some(response))) => serde_json::from_value::<GithubError>(response)
+                .map_err(|err| format!("Failed to parse error response: {}", err))
+                .and_then(|error| Err(error.message.into())),
+            Ok((_, _, None)) => Err("Received error response from github with no message".into()),
+            Err(err) => Err(format!("Failed to execute request: {}", err)),
         }
     }
 }
 
-impl AssignedTo<Milestone> for Issue {
-    fn assigned_to(&self, assignable: &Milestone) -> bool {
-        if let Some(issue_milestone) = &self.milestone {
-            if issue_milestone.id == assignable.id {
-                return true;
-            }
+impl<'a> TryExecute for ::github_rs::repos::get::IssuesNumber<'a> {}
+
+impl Client {
+    pub fn new(token: &str) -> Self {
+        // Nice github API
+        let github_client = Github::new(token).expect("Failed to create Github client");
+
+        // Raw REST endpoints
+        let reqwest_client = reqwest::Client::new();
+        let mut reqwest_headers = HeaderMap::new();
+        reqwest_headers.insert(
+            AUTHORIZATION,
+            format!("token {}", token)
+                .parse()
+                .expect("Invalid auth header"),
+        );
+
+        Client {
+            github_client,
+            reqwest_client,
+            reqwest_headers,
         }
-        false
     }
-}
 
-#[cfg(test)]
-mod tests {
-    // use pretty_assertions::assert;
+    pub fn get_milestone_by_title(&self, title: &str) -> Milestone {
+        let milestones: Vec<Milestone> = self
+            .reqwest_client
+            .get("https://api.github.com/repos/reinfer/platform/milestones")
+            .headers(self.reqwest_headers.clone())
+            .send()
+            .unwrap()
+            .json()
+            .unwrap();
+        let milestone = milestones
+            .into_iter()
+            .find(|milestone| milestone.title == title)
+            .expect("Could not find matching milestone");
+        milestone
+    }
 
-    use super::*;
-    #[test]
-    fn issue_assigned_to_milestone() {
-        let milestone = Milestone::default();
-        let issue = Issue::default();
-        let mut issue_with_milestone = issue.clone();
-        issue_with_milestone.milestone = Some(milestone.clone());
-        assert!(!issue.assigned_to(&milestone));
-        assert!(issue_with_milestone.assigned_to(&milestone));
+    pub fn assign_issue_to_milestone(&self, issue: &Issue, milestone: &Milestone) -> () {
+        self.reqwest_client
+            .patch(&format!(
+                "https://api.github.com/repos/reinfer/platform/issues/{}",
+                issue.number
+            ))
+            .json(&IssuePatch {
+                milestone: milestone.number,
+            })
+            .headers(self.reqwest_headers.clone())
+            .send()
+            .unwrap();
+    }
+
+    pub fn get_issue_by_number(&self, number: &str) -> Issue {
+        self.github_client
+            .get()
+            .repos()
+            .owner("reinfer")
+            .repo("platform")
+            .issues()
+            .number(&number)
+            .try_execute::<Issue>()
+            .expect("Failed to get issue")
     }
 }
