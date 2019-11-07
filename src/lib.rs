@@ -42,6 +42,7 @@ trait TryExecute: Executor {
 impl<'a> TryExecute for ::github_rs::repos::get::IssuesNumber<'a> {}
 
 impl Client {
+    /// Create a new client that can make requests to the Github API using token auth.
     pub fn new(token: &str) -> Self {
         // Nice github API
         let github_client = Github::new(token).expect("Failed to create Github client");
@@ -63,6 +64,7 @@ impl Client {
         }
     }
 
+    /// Get a milestone from the API, given a known title.
     pub fn get_milestone_by_title(&self, title: &str) -> Milestone {
         let milestones: Vec<Milestone> = self
             .reqwest_client
@@ -79,6 +81,9 @@ impl Client {
         milestone
     }
 
+    /// Assign an issue to a milestone.
+    ///
+    /// This will overwrite an existing milestone, if present.
     pub fn assign_issue_to_milestone(&self, issue: &Issue, milestone: &Milestone) -> () {
         self.reqwest_client
             .patch(&format!(
@@ -93,6 +98,7 @@ impl Client {
             .unwrap();
     }
 
+    /// Get an issue by number.
     pub fn get_issue_by_number(&self, number: &str) -> Issue {
         self.github_client
             .get()

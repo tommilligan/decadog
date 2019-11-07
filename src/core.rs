@@ -2,10 +2,14 @@ use std::fmt;
 
 use serde_derive::{Deserialize, Serialize};
 
+/// Represents objects in the Github ontology that can be assigned to one another.
+///
+/// e.g. `User` assigned to `Issue`, `Issue` assigned to `Milestone`
 pub trait AssignedTo<T> {
     fn assigned_to(&self, assignable: &T) -> bool;
 }
 
+/// A Github Milestone.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Milestone {
     pub id: u32,
@@ -14,6 +18,7 @@ pub struct Milestone {
     pub state: String,
 }
 
+/// A Github Issue.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Issue {
     pub id: u32,
@@ -23,6 +28,7 @@ pub struct Issue {
     pub milestone: Option<Milestone>,
 }
 
+/// Updates to an Issue, as expected in the `PATCH` update.
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct IssuePatch {
     pub milestone: u32,
