@@ -1,0 +1,3 @@
+# decadog
+
+Github toolkit. Octocat++.
