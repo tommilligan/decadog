@@ -1,12 +1,13 @@
 use std::env;
-use std::fmt;
 
 use dialoguer::{Confirmation, Input};
 use github_rs::client::{Executor, Github};
 use github_rs::StatusCode;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use serde::de::DeserializeOwned;
-use serde_derive::{Deserialize, Serialize};
+use serde_derive::Deserialize;
+
+use decadog::{AssignedTo, Issue, IssuePatch, Milestone};
 
 trait TryExecute: Executor {
     fn try_execute<'de, T>(self) -> Result<T, String>
@@ -33,48 +34,6 @@ trait TryExecute: Executor {
 }
 
 impl<'a> TryExecute for ::github_rs::repos::get::IssuesNumber<'a> {}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-struct Milestone {
-    id: u32,
-    number: u32,
-    title: String,
-    state: String,
-}
-
-impl fmt::Display for Milestone {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.title, self.state)
-    }
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-struct Issue {
-    id: u32,
-    number: u32,
-    state: String,
-    title: String,
-    milestone: Option<Milestone>,
-}
-
-#[derive(Deserialize, Serialize, Debug, Clone)]
-struct UpdateMilestone {
-    milestone: u32,
-}
-
-impl fmt::Display for Issue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(milestone) = &self.milestone {
-            write!(
-                f,
-                "{} ({}) [{}]: {}",
-                self.number, self.state, milestone.title, self.title
-            )
-        } else {
-            write!(f, "{} ({}): {}", self.number, self.state, self.title)
-        }
-    }
-}
 
 fn main() -> Result<(), reqwest::Error> {
     // Load token from env
@@ -124,11 +83,9 @@ fn main() -> Result<(), reqwest::Error> {
             .try_execute::<Issue>()
             .expect("Failed to get issue");
 
-        if let Some(issue_milestone) = &issue.milestone {
-            if issue_milestone.id == milestone.id {
-                println!("Already assigned to milestone");
-                continue;
-            }
+        if issue.assigned_to(&milestone) {
+            println!("Already assigned to milestone");
+            continue;
         }
 
         println!("{}", issue);
@@ -143,7 +100,7 @@ fn main() -> Result<(), reqwest::Error> {
                     "https://api.github.com/repos/reinfer/platform/issues/{}",
                     issue.number
                 ))
-                .json(&UpdateMilestone {
+                .json(&IssuePatch {
                     milestone: milestone.number,
                 })
                 .headers(headers.clone())
