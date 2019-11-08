@@ -97,4 +97,14 @@ mod tests {
         assert!(!issue.assigned_to(&milestone));
         assert!(issue_with_milestone.assigned_to(&milestone));
     }
+
+    #[test]
+    fn member_assigned_to_issue() {
+        let issue = Issue::default();
+        let member = OrganisationMember::default();
+        let mut issue_with_assignee = issue.clone();
+        issue_with_assignee.assignees = vec![member.clone()];
+        assert!(!member.assigned_to(&issue));
+        assert!(member.assigned_to(&issue_with_assignee));
+    }
 }
