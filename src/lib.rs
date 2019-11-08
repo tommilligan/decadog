@@ -3,11 +3,23 @@ use github_rs::StatusCode;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::Client as ReqwestClient;
 use serde::de::DeserializeOwned;
-use serde_derive::Deserialize;
+use serde_derive::{Deserialize, Serialize};
 
 mod core;
 
-pub use crate::core::{AssignedTo, Issue, IssuePatch, Milestone};
+pub use crate::core::{AssignedTo, Issue, Milestone, OrganisationMember};
+
+/// Updates an Issue milestone.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct IssuePatchMilestone {
+    pub milestone: u32,
+}
+
+/// Updates an Issue assignees.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct IssuePatchAssignees {
+    pub assignees: Vec<String>,
+}
 
 pub struct Client {
     github_client: Github,
@@ -40,6 +52,7 @@ trait TryExecute: Executor {
 }
 
 impl<'a> TryExecute for ::github_rs::repos::get::IssuesNumber<'a> {}
+impl<'a> TryExecute for ::github_rs::orgs::get::OrgsOrgMembers<'a> {}
 
 impl Client {
     /// Create a new client that can make requests to the Github API using token auth.
@@ -64,21 +77,15 @@ impl Client {
         }
     }
 
-    /// Get a milestone from the API, given a known title.
-    pub fn get_milestone_by_title(&self, title: &str) -> Milestone {
-        let milestones: Vec<Milestone> = self
-            .reqwest_client
+    /// Get a milestones from the API.
+    pub fn get_milestones(&self) -> Vec<Milestone> {
+        self.reqwest_client
             .get("https://api.github.com/repos/reinfer/platform/milestones")
             .headers(self.reqwest_headers.clone())
             .send()
             .unwrap()
             .json()
-            .unwrap();
-        let milestone = milestones
-            .into_iter()
-            .find(|milestone| milestone.title == title)
-            .expect("Could not find matching milestone");
-        milestone
+            .unwrap()
     }
 
     /// Assign an issue to a milestone.
@@ -90,8 +97,25 @@ impl Client {
                 "https://api.github.com/repos/reinfer/platform/issues/{}",
                 issue.number
             ))
-            .json(&IssuePatch {
+            .json(&IssuePatchMilestone {
                 milestone: milestone.number,
+            })
+            .headers(self.reqwest_headers.clone())
+            .send()
+            .unwrap();
+    }
+
+    /// Assign an organisation member to an issue.
+    ///
+    /// This will overwrite any existing assignees, if present.
+    pub fn assign_member_to_issue(&self, member: &OrganisationMember, issue: &Issue) -> () {
+        self.reqwest_client
+            .patch(&format!(
+                "https://api.github.com/repos/reinfer/platform/issues/{}",
+                issue.number
+            ))
+            .json(&IssuePatchAssignees {
+                assignees: vec![member.login.clone()],
             })
             .headers(self.reqwest_headers.clone())
             .send()
@@ -109,5 +133,16 @@ impl Client {
             .number(&number)
             .try_execute::<Issue>()
             .expect("Failed to get issue")
+    }
+
+    /// Get a milestones from the API.
+    pub fn get_members(&self) -> Vec<OrganisationMember> {
+        self.github_client
+            .get()
+            .orgs()
+            .org("reinfer")
+            .members()
+            .try_execute::<Vec<OrganisationMember>>()
+            .expect("Failed to get users")
     }
 }

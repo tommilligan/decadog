@@ -18,6 +18,21 @@ pub struct Milestone {
     pub state: String,
 }
 
+/// A memeber reference in an Organisation.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct OrganisationMember {
+    pub login: String,
+    pub id: u32,
+}
+
+/// A Github User.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct User {
+    pub login: String,
+    pub id: u32,
+    pub name: String,
+}
+
 /// A Github Issue.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Issue {
@@ -26,12 +41,7 @@ pub struct Issue {
     pub state: String,
     pub title: String,
     pub milestone: Option<Milestone>,
-}
-
-/// Updates to an Issue, as expected in the `PATCH` update.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct IssuePatch {
-    pub milestone: u32,
+    pub assignees: Vec<OrganisationMember>,
 }
 
 impl fmt::Display for Milestone {
@@ -62,6 +72,15 @@ impl AssignedTo<Milestone> for Issue {
             }
         }
         false
+    }
+}
+
+impl AssignedTo<Issue> for OrganisationMember {
+    fn assigned_to(&self, assignable: &Issue) -> bool {
+        assignable
+            .assignees
+            .iter()
+            .any(|organisation_member| organisation_member.login == self.login)
     }
 }
 
