@@ -56,9 +56,9 @@ impl<'a> TryExecute for ::github_rs::orgs::get::OrgsOrgMembers<'a> {}
 
 impl Client {
     /// Create a new client that can make requests to the Github API using token auth.
-    pub fn new(token: &str) -> Self {
+    pub fn new(token: &str) -> Result<Client, Error> {
         // Nice github API
-        let github_client = Github::new(token).expect("Failed to create Github client");
+        let github_client = Github::new(token)?;
 
         // Raw REST endpoints
         let reqwest_client = reqwest::Client::new();
@@ -70,11 +70,11 @@ impl Client {
                 .expect("Invalid auth header"),
         );
 
-        Client {
+        Ok(Client {
             github_client,
             reqwest_client,
             reqwest_headers,
-        }
+        })
     }
 
     /// Get a milestones from the API.
@@ -146,3 +146,27 @@ impl Client {
             .expect("Failed to get users")
     }
 }
+
+mod error {
+    use github_rs::errors::Error as GithubError;
+    use snafu::Snafu;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility = "pub")]
+    pub enum Error {
+        #[snafu(display("Github client error: {}", source))]
+        Github { source: GithubError },
+
+        #[snafu(display("Protocol error: {}", reason))]
+        Protocol { reason: String },
+    }
+
+    impl From<GithubError> for Error {
+        fn from(source: GithubError) -> Self {
+            Error::Github { source }
+        }
+    }
+}
+pub use error::Error;
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;

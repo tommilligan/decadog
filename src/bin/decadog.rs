@@ -5,17 +5,17 @@ use decadog::{AssignedTo, Client, OrganisationMember};
 use dialoguer::{Confirmation, Input, Select};
 use scout;
 
-fn main() {
+fn main() -> Result<(), Error> {
     // Load token from env
     let github_token = env::var("GITHUB_TOKEN").expect("No GITHUB_TOKEN");
 
-    let client = Client::new(&github_token);
+    let client = Client::new(&github_token)?;
 
     // Select milestone to move tickets to
     let milestones = client.get_milestones();
     if milestones.len() == 0 {
         eprintln!("No open milestones.");
-        return ();
+        return Ok(());
     }
 
     let selection = Select::new()
@@ -27,8 +27,8 @@ fn main() {
                 .map(|milestone| &milestone.title)
                 .collect::<Vec<&String>>(),
         )
-        .interact()
-        .unwrap();
+        .interact()?;
+
     let milestone = &milestones[selection];
 
     eprintln!("Loading organisation memebers...");
@@ -43,8 +43,7 @@ fn main() {
         // Input an issue number
         let issue_number = Input::<String>::new()
             .with_prompt("Issue number")
-            .interact()
-            .expect("Failed interaction");
+            .interact()?;
 
         // Fetch the issue
         let issue = client.get_issue_by_number(&issue_number);
@@ -57,8 +56,7 @@ fn main() {
             // Otherwise, confirm the assignment
             if Confirmation::new()
                 .with_text("Assign milestone?")
-                .interact()
-                .expect("Failed interation")
+                .interact()?
             {
                 client.assign_issue_to_milestone(&issue, &milestone);
             }
@@ -79,10 +77,9 @@ fn main() {
         };
         if Confirmation::new()
             .with_text(&assignment_prompt)
-            .interact()
-            .expect("Failed interation")
+            .interact()?
         {
-            let member_login = scout::start(member_logins.clone(), vec![]).expect("scout failed");
+            let member_login = scout::start(member_logins.clone(), vec![])?;
             let organisation_member = match members_by_login.get(&member_login) {
                 Some(member_login) => member_login,
                 None => continue,
@@ -93,3 +90,45 @@ fn main() {
         }
     }
 }
+
+mod error {
+    use std::io::Error as IoError;
+
+    use decadog::Error as DecadogError;
+    use scout::errors::Error as ScoutError;
+    use snafu::Snafu;
+
+    #[derive(Debug, Snafu)]
+    #[snafu(visibility = "pub")]
+    pub enum Error {
+        #[snafu(display("Decadog client error: {}", source))]
+        Decadog { source: DecadogError },
+
+        #[snafu(display("Scout error: {}", source))]
+        Scout { source: ScoutError },
+
+        #[snafu(display("Io error: {}", source))]
+        Io { source: IoError },
+    }
+
+    impl From<DecadogError> for Error {
+        fn from(source: DecadogError) -> Self {
+            Error::Decadog { source }
+        }
+    }
+
+    impl From<ScoutError> for Error {
+        fn from(source: ScoutError) -> Self {
+            Error::Scout { source }
+        }
+    }
+
+    impl From<IoError> for Error {
+        fn from(source: IoError) -> Self {
+            Error::Io { source }
+        }
+    }
+}
+pub use error::Error;
+
+pub type Result<T, E = Error> = std::result::Result<T, E>;
