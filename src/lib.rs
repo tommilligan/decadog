@@ -5,7 +5,7 @@ use std::hash::Hasher;
 use github_rs::client::{Executor, Github};
 use github_rs::StatusCode;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
-use reqwest::Client as ReqwestClient;
+use reqwest::{Client as ReqwestClient, RequestBuilder};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
@@ -72,6 +72,23 @@ trait TryExecute: Executor {
 impl<'a> TryExecute for ::github_rs::repos::get::IssuesNumber<'a> {}
 impl<'a> TryExecute for ::github_rs::orgs::get::OrgsOrgMembers<'a> {}
 
+trait TrySend {
+    fn try_send<T>(self) -> Result<T, Error>
+    where
+        Self: Sized,
+        T: DeserializeOwned;
+}
+
+impl TrySend for RequestBuilder {
+    fn try_send<T>(self) -> Result<T, Error>
+    where
+        Self: Sized,
+        T: DeserializeOwned,
+    {
+        Ok(self.send()?.json()?)
+    }
+}
+
 impl Client {
     /// Create a new client that can make requests to the Github API using token auth.
     pub fn new(token: &str) -> Result<Client, Error> {
@@ -102,20 +119,22 @@ impl Client {
     }
 
     /// Get a milestones from the API.
-    pub fn get_milestones(&self) -> Vec<Milestone> {
-        self.reqwest_client
+    pub fn get_milestones(&self) -> Result<Vec<Milestone>, Error> {
+        Ok(self
+            .reqwest_client
             .get("https://api.github.com/repos/reinfer/platform/milestones")
             .headers(self.reqwest_headers.clone())
-            .send()
-            .unwrap()
-            .json()
-            .unwrap()
+            .try_send()?)
     }
 
     /// Assign an issue to a milestone.
     ///
     /// This will overwrite an existing milestone, if present.
-    pub fn assign_issue_to_milestone(&self, issue: &Issue, milestone: &Milestone) -> () {
+    pub fn assign_issue_to_milestone(
+        &self,
+        issue: &Issue,
+        milestone: &Milestone,
+    ) -> Result<(), Error> {
         self.reqwest_client
             .patch(&format!(
                 "https://api.github.com/repos/reinfer/platform/issues/{}",
@@ -125,14 +144,18 @@ impl Client {
                 milestone: milestone.number,
             })
             .headers(self.reqwest_headers.clone())
-            .send()
-            .unwrap();
+            .send()?;
+        Ok(())
     }
 
     /// Assign an organisation member to an issue.
     ///
     /// This will overwrite any existing assignees, if present.
-    pub fn assign_member_to_issue(&self, member: &OrganisationMember, issue: &Issue) -> () {
+    pub fn assign_member_to_issue(
+        &self,
+        member: &OrganisationMember,
+        issue: &Issue,
+    ) -> Result<(), Error> {
         self.reqwest_client
             .patch(&format!(
                 "https://api.github.com/repos/reinfer/platform/issues/{}",
@@ -142,37 +165,38 @@ impl Client {
                 assignees: vec![member.login.clone()],
             })
             .headers(self.reqwest_headers.clone())
-            .send()
-            .unwrap();
+            .send()?;
+        Ok(())
     }
 
     /// Get an issue by number.
-    pub fn get_issue_by_number(&self, number: &str) -> Issue {
-        self.github_client
+    pub fn get_issue_by_number(&self, number: &str) -> Result<Issue, Error> {
+        Ok(self
+            .github_client
             .get()
             .repos()
             .owner("reinfer")
             .repo("platform")
             .issues()
             .number(&number)
-            .try_execute::<Issue>()
-            .expect("Failed to get issue")
+            .try_execute::<Issue>()?)
     }
 
     /// Get a milestones from the API.
-    pub fn get_members(&self) -> Vec<OrganisationMember> {
-        self.github_client
+    pub fn get_members(&self) -> Result<Vec<OrganisationMember>, Error> {
+        Ok(self
+            .github_client
             .get()
             .orgs()
             .org("reinfer")
             .members()
-            .try_execute::<Vec<OrganisationMember>>()
-            .expect("Failed to get users")
+            .try_execute::<Vec<OrganisationMember>>()?)
     }
 }
 
 mod error {
     use github_rs::errors::Error as GithubError;
+    use reqwest::Error as ReqwestError;
     use snafu::Snafu;
 
     #[derive(Debug, Snafu)]
@@ -184,13 +208,29 @@ mod error {
         #[snafu(display("Github client error: {}", source))]
         Github { source: GithubError },
 
-        #[snafu(display("Protocol error: {}", reason))]
-        Protocol { reason: String },
+        #[snafu(display("Reqwest error: {}", source))]
+        Reqwest { source: ReqwestError },
     }
 
     impl From<GithubError> for Error {
         fn from(source: GithubError) -> Self {
             Error::Github { source }
+        }
+    }
+
+    impl From<ReqwestError> for Error {
+        fn from(source: ReqwestError) -> Self {
+            Error::Reqwest { source }
+        }
+    }
+
+    // TODO this error cast is very general and should be removed
+    // to manual casting if need be
+    impl From<String> for Error {
+        fn from(source: String) -> Self {
+            Error::BadRequest {
+                description: source,
+            }
         }
     }
 }

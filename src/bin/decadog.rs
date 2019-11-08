@@ -12,7 +12,7 @@ fn main() -> Result<(), Error> {
     let client = Client::new(&github_token)?;
 
     // Select milestone to move tickets to
-    let milestones = client.get_milestones();
+    let milestones = client.get_milestones()?;
     if milestones.len() == 0 {
         eprintln!("No open milestones.");
         return Ok(());
@@ -32,7 +32,7 @@ fn main() -> Result<(), Error> {
     let milestone = &milestones[selection];
 
     eprintln!("Loading organisation memebers...");
-    let organisation_members = client.get_members();
+    let organisation_members = client.get_members()?;
     let members_by_login: HashMap<String, OrganisationMember> = organisation_members
         .into_iter()
         .map(|member| (member.login.clone(), member))
@@ -46,7 +46,7 @@ fn main() -> Result<(), Error> {
             .interact()?;
 
         // Fetch the issue
-        let issue = client.get_issue_by_number(&issue_number);
+        let issue = client.get_issue_by_number(&issue_number)?;
         eprintln!("{}", issue);
 
         // If already assigned to the target milestone, no-op
@@ -58,7 +58,7 @@ fn main() -> Result<(), Error> {
                 .with_text("Assign milestone?")
                 .interact()?
             {
-                client.assign_issue_to_milestone(&issue, &milestone);
+                client.assign_issue_to_milestone(&issue, &milestone)?;
             }
         }
 
@@ -85,7 +85,7 @@ fn main() -> Result<(), Error> {
                 None => continue,
             };
             if !organisation_member.assigned_to(&issue) {
-                client.assign_member_to_issue(&organisation_member, &issue);
+                client.assign_member_to_issue(&organisation_member, &issue)?;
             }
         }
     }

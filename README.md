@@ -40,5 +40,5 @@ It will:
   - [ ] make this one subcommand
   - [ ] parameterise owner/repo fields
   - [ ] config file for frequent use, from pwd
-- [ ] Error handling
+- [\] Error handling
   - [ ] Verify response of assignment
