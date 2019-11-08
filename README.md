@@ -8,6 +8,13 @@ Github toolkit. Octocat++.
 
 `git clone` followed by `cargo run`
 
+## Useage
+
+You will need a Github API token (probably a PAT token). You can generate this from
+the settings page in the Github API. Currently, the scope of the project is `repo`.
+
+Set this token in the environment as `GITHUB_TOKEN` before running.
+
 ## Todo
 
 - [x] Make assigning multiple tickets to the same milestone painless
