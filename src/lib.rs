@@ -1,3 +1,7 @@
+use std::collections::hash_map::DefaultHasher;
+use std::fmt;
+use std::hash::Hasher;
+
 use github_rs::client::{Executor, Github};
 use github_rs::StatusCode;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
@@ -21,10 +25,24 @@ pub struct IssuePatchAssignees {
     pub assignees: Vec<String>,
 }
 
+/// Decadog client, used to abstract complex tasks over the Github API.
 pub struct Client {
+    id: u64,
     github_client: Github,
     reqwest_client: ReqwestClient,
     reqwest_headers: HeaderMap,
+}
+
+impl fmt::Debug for Client {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Decadog client {}", self.id)
+    }
+}
+
+impl PartialEq for Client {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
 }
 
 trait TryExecute: Executor {
@@ -67,10 +85,16 @@ impl Client {
             AUTHORIZATION,
             format!("token {}", token)
                 .parse()
-                .expect("Invalid auth header"),
+                .map_err(|_| Error::BadRequest {
+                    description: "Invalid Github token for Authorization header.".to_owned(),
+                })?,
         );
 
+        let mut hasher = DefaultHasher::new();
+        hasher.write(token.as_bytes());
+
         Ok(Client {
+            id: hasher.finish(),
             github_client,
             reqwest_client,
             reqwest_headers,
@@ -154,6 +178,9 @@ mod error {
     #[derive(Debug, Snafu)]
     #[snafu(visibility = "pub")]
     pub enum Error {
+        #[snafu(display("Bad request to Decadog: {}", description))]
+        BadRequest { description: String },
+
         #[snafu(display("Github client error: {}", source))]
         Github { source: GithubError },
 
@@ -170,3 +197,22 @@ mod error {
 pub use error::Error;
 
 pub type Result<T, E = Error> = std::result::Result<T, E>;
+
+#[cfg(test)]
+mod tests {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
+
+    #[test]
+    fn invalid_github_token() {
+        assert!(Client::new("my_secret_token").is_ok());
+        match Client::new("invalid header char -> \n").unwrap_err() {
+            Error::BadRequest { description } => assert_eq!(
+                description,
+                "Invalid Github token for Authorization header."
+            ),
+            _ => panic!("Unexpected error"),
+        }
+    }
+}
