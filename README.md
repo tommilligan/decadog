@@ -35,7 +35,7 @@ It will:
 - [x] Make assigning multiple tickets to the same milestone painless
   - [x] Assign to milestone
   - [x] Assign to users
-    - [ ] Fuzzy aided selection of users from cli
+    - [x] Fuzzy aided selection of users from cli
 - [ ] CLI interface
   - [ ] make this one subcommand
   - [ ] parameterise owner/repo fields

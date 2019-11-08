@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::env;
 
-use decadog::{AssignedTo, Client};
+use decadog::{AssignedTo, Client, OrganisationMember};
 use dialoguer::{Confirmation, Input, Select};
+use scout;
 
 fn main() {
     // Load token from env
@@ -31,10 +33,11 @@ fn main() {
 
     eprintln!("Loading organisation memebers...");
     let organisation_members = client.get_members();
-    let organisation_member_names = organisation_members
-        .iter()
-        .map(|organisation_member| &organisation_member.login)
-        .collect::<Vec<&String>>();
+    let members_by_login: HashMap<String, OrganisationMember> = organisation_members
+        .into_iter()
+        .map(|member| (member.login.clone(), member))
+        .collect();
+    let member_logins: Vec<&str> = members_by_login.keys().map(|login| &login[..]).collect();
 
     loop {
         // Input an issue number
@@ -49,7 +52,7 @@ fn main() {
 
         // If already assigned to the target milestone, no-op
         if issue.assigned_to(&milestone) {
-            eprintln!("Already in milestone");
+            eprintln!("Already in milestone.");
         } else {
             // Otherwise, confirm the assignment
             if Confirmation::new()
@@ -61,15 +64,32 @@ fn main() {
             }
         }
 
-        let selection = Select::new()
-            .with_prompt("Assign")
-            .default(0)
-            .items(&organisation_member_names)
+        let assignment_prompt = if issue.assignees.len() == 0 {
+            "Assign member?".to_owned()
+        } else {
+            format!(
+                "Currently assigned to {}. Update?",
+                issue
+                    .assignees
+                    .iter()
+                    .map(|member| member.login.clone())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+        };
+        if Confirmation::new()
+            .with_text(&assignment_prompt)
             .interact()
-            .unwrap();
-        let organisation_member = &organisation_members[selection];
-        if !organisation_member.assigned_to(&issue) {
-            client.assign_member_to_issue(&organisation_member, &issue);
+            .expect("Failed interation")
+        {
+            let member_login = scout::start(member_logins.clone(), vec![]).expect("scout failed");
+            let organisation_member = match members_by_login.get(&member_login) {
+                Some(member_login) => member_login,
+                None => continue,
+            };
+            if !organisation_member.assigned_to(&issue) {
+                client.assign_member_to_issue(&organisation_member, &issue);
+            }
         }
     }
 }
