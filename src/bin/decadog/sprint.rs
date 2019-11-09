@@ -1,11 +1,15 @@
 use std::collections::HashMap;
 use std::env;
 
+use clap::{App, ArgMatches, SubCommand};
 use decadog::{AssignedTo, Client, OrganisationMember};
 use dialoguer::{Confirmation, Input, Select};
+use log::{error, info};
 use scout;
 
-fn main() -> Result<(), Error> {
+use crate::error::Error;
+
+fn start_sprint() -> Result<(), Error> {
     // Load token from env
     let github_token = env::var("GITHUB_TOKEN").expect("No GITHUB_TOKEN");
 
@@ -14,7 +18,7 @@ fn main() -> Result<(), Error> {
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;
     if milestones.len() == 0 {
-        eprintln!("No open milestones.");
+        error!("No open milestones.");
         return Ok(());
     }
 
@@ -31,7 +35,7 @@ fn main() -> Result<(), Error> {
 
     let milestone = &milestones[selection];
 
-    eprintln!("Loading organisation memebers...");
+    info!("Loading organisation memebers...");
     let organisation_members = client.get_members()?;
     let members_by_login: HashMap<String, OrganisationMember> = organisation_members
         .into_iter()
@@ -91,44 +95,23 @@ fn main() -> Result<(), Error> {
     }
 }
 
-mod error {
-    use std::io::Error as IoError;
-
-    use decadog::Error as DecadogError;
-    use scout::errors::Error as ScoutError;
-    use snafu::Snafu;
-
-    #[derive(Debug, Snafu)]
-    #[snafu(visibility = "pub")]
-    pub enum Error {
-        #[snafu(display("Decadog client error: {}", source))]
-        Decadog { source: DecadogError },
-
-        #[snafu(display("Scout error: {}", source))]
-        Scout { source: ScoutError },
-
-        #[snafu(display("Io error: {}", source))]
-        Io { source: IoError },
-    }
-
-    impl From<DecadogError> for Error {
-        fn from(source: DecadogError) -> Self {
-            Error::Decadog { source }
+pub fn execute(matches: &ArgMatches) -> Result<(), Error> {
+    if let (subcommand_name, Some(_)) = matches.subcommand() {
+        match subcommand_name {
+            "start" => {
+                start_sprint()?;
+            }
+            _ => error!("Invalid subcommand."),
         }
     }
-
-    impl From<ScoutError> for Error {
-        fn from(source: ScoutError) -> Self {
-            Error::Scout { source }
-        }
-    }
-
-    impl From<IoError> for Error {
-        fn from(source: IoError) -> Self {
-            Error::Io { source }
-        }
-    }
+    Ok(())
 }
-pub use error::Error;
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
+pub fn subcommand<'a, 'b>() -> App<'a, 'b> {
+    SubCommand::with_name("sprint")
+        .about("Manage sprints.")
+        .subcommand(
+            SubCommand::with_name("start")
+                .about("Assign issues to a sprint, and people to issues."),
+        )
+}
