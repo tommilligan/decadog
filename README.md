@@ -48,3 +48,6 @@ It will:
   - [x] config file for frequent use, from pwd
 - [x] Error handling
   - [x] Verify response of assignment
+  - [ ] Make errors shown to users nicer
+    - [ ] Make config errors clearer
+  - [ ] Manage exit codes
