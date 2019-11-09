@@ -14,10 +14,10 @@ cargo install --git https://github.com/tommilligan/decadog
 
 ## Use
 
-You will need a Github API token (probably a PAT token). You can generate this from
-the settings page in the Github API. You should grant the scope `repo`.
+You will need a Github API token. You can generate this from the [Settings > Tokens](https://github.com/settings/tokens) page in the Github UI.
+You should grant the scope `repo`.
 
-Set this token in the environment as `DECADOG_GITHUB_TOKEN`.
+Set this token in your environment as `DECADOG_GITHUB_TOKEN`.
 
 See the [example configuration file](./tree/master/example/decadog.yml). This file should be in your current working directory.
 
