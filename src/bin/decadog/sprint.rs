@@ -13,7 +13,7 @@ fn start_sprint() -> Result<(), Error> {
     // Load token from env
     let github_token = env::var("GITHUB_TOKEN").expect("No GITHUB_TOKEN");
 
-    let client = Client::new(&github_token)?;
+    let client = Client::new(&github_token, "reinfer", "platform")?;
 
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;

@@ -6,17 +6,17 @@ edition = "2018"
 
 [dependencies]
 clap = "2.33.0"
+config = "0.9.3"
 dialoguer = "0.5.0"
+env_logger = "0.7.1"
 github-rs = "0.7.0"
+log = "0.4.8"
 reqwest = "0.9.22"
 scout = "1.3.0"
 serde = "1.0.102"
 serde_derive = "1.0.102"
 serde_json = "1.0.41"
 snafu = "0.6.0"
-env_logger = "0.7.1"
-config = "0.9.3"
-log = "0.4.8"
 
 [dev-dependencies]
 pretty_assertions = "0.6.1"

@@ -5,7 +5,7 @@ use std::hash::Hasher;
 use github_rs::client::{Executor, Github};
 use github_rs::StatusCode;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
-use reqwest::{Client as ReqwestClient, RequestBuilder};
+use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
@@ -26,20 +26,24 @@ pub struct IssuePatchAssignees {
 }
 
 /// Decadog client, used to abstract complex tasks over the Github API.
-pub struct Client {
+pub struct Client<'a> {
     id: u64,
     github_client: Github,
     reqwest_client: ReqwestClient,
     reqwest_headers: HeaderMap,
+
+    owner: &'a str,
+    repo: &'a str,
+    repo_url: Url,
 }
 
-impl fmt::Debug for Client {
+impl<'a> fmt::Debug for Client<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Decadog client {}", self.id)
     }
 }
 
-impl PartialEq for Client {
+impl<'a> PartialEq for Client<'a> {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
@@ -72,6 +76,20 @@ trait TryExecute: Executor {
 impl<'a> TryExecute for ::github_rs::repos::get::IssuesNumber<'a> {}
 impl<'a> TryExecute for ::github_rs::orgs::get::OrgsOrgMembers<'a> {}
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct ClientErrorDetail {
+    pub resource: String,
+    pub field: String,
+    pub code: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct ClientErrorBody {
+    pub message: String,
+    pub errors: Option<Vec<ClientErrorDetail>>,
+    pub documentation_url: Option<String>,
+}
+
 trait TrySend {
     fn try_send<T>(self) -> Result<T, Error>
     where
@@ -85,13 +103,27 @@ impl TrySend for RequestBuilder {
         Self: Sized,
         T: DeserializeOwned,
     {
-        Ok(self.send()?.json()?)
+        let mut response = self.send()?;
+        let status = response.status();
+        if status.is_success() {
+            Ok(response.json()?)
+        } else if status.is_client_error() {
+            Err(Error::Github {
+                description: format!("Client error: {:?}", response.json::<ClientErrorBody>()?),
+                status,
+            })
+        } else {
+            Err(Error::Github {
+                description: format!("Unexpected response status code."),
+                status,
+            })
+        }
     }
 }
 
-impl Client {
+impl<'a> Client<'a> {
     /// Create a new client that can make requests to the Github API using token auth.
-    pub fn new(token: &str) -> Result<Client, Error> {
+    pub fn new(token: &str, owner: &'a str, repo: &'a str) -> Result<Client<'a>, Error> {
         // Nice github API
         let github_client = Github::new(token)?;
 
@@ -102,29 +134,52 @@ impl Client {
             AUTHORIZATION,
             format!("token {}", token)
                 .parse()
-                .map_err(|_| Error::BadRequest {
+                .map_err(|_| Error::Config {
                     description: "Invalid Github token for Authorization header.".to_owned(),
                 })?,
         );
 
+        let repo_url = Url::parse(&format!("https://api.github.com/repos/{}/{}/", owner, repo))
+            .map_err(|_| Error::Config {
+                description: "Invalid owner or repo name.".to_owned(),
+            })?;
+
         let mut hasher = DefaultHasher::new();
         hasher.write(token.as_bytes());
+        hasher.write(owner.as_bytes());
+        hasher.write(repo.as_bytes());
+        let id = hasher.finish();
 
         Ok(Client {
-            id: hasher.finish(),
+            id,
             github_client,
             reqwest_client,
             reqwest_headers,
+
+            owner,
+            repo,
+            repo_url,
         })
+    }
+
+    pub fn owner(&self) -> &str {
+        self.owner
+    }
+
+    pub fn repo(&self) -> &str {
+        self.repo
+    }
+
+    pub fn request(&self, method: Method, url: &str) -> Result<RequestBuilder, UrlError> {
+        Ok(self
+            .reqwest_client
+            .request(method, self.repo_url.join(url)?)
+            .headers(self.reqwest_headers.clone()))
     }
 
     /// Get a milestones from the API.
     pub fn get_milestones(&self) -> Result<Vec<Milestone>, Error> {
-        Ok(self
-            .reqwest_client
-            .get("https://api.github.com/repos/reinfer/platform/milestones")
-            .headers(self.reqwest_headers.clone())
-            .try_send()?)
+        Ok(self.request(Method::GET, "milestones")?.try_send()?)
     }
 
     /// Assign an issue to a milestone.
@@ -134,18 +189,13 @@ impl Client {
         &self,
         issue: &Issue,
         milestone: &Milestone,
-    ) -> Result<(), Error> {
-        self.reqwest_client
-            .patch(&format!(
-                "https://api.github.com/repos/reinfer/platform/issues/{}",
-                issue.number
-            ))
+    ) -> Result<Issue, Error> {
+        Ok(self
+            .request(Method::PATCH, &format!("issues/{}", issue.number))?
             .json(&IssuePatchMilestone {
                 milestone: milestone.number,
             })
-            .headers(self.reqwest_headers.clone())
-            .send()?;
-        Ok(())
+            .try_send()?)
     }
 
     /// Assign an organisation member to an issue.
@@ -155,18 +205,13 @@ impl Client {
         &self,
         member: &OrganisationMember,
         issue: &Issue,
-    ) -> Result<(), Error> {
-        self.reqwest_client
-            .patch(&format!(
-                "https://api.github.com/repos/reinfer/platform/issues/{}",
-                issue.number
-            ))
+    ) -> Result<Issue, Error> {
+        Ok(self
+            .request(Method::PATCH, &format!("issues/{}", issue.number))?
             .json(&IssuePatchAssignees {
                 assignees: vec![member.login.clone()],
             })
-            .headers(self.reqwest_headers.clone())
-            .send()?;
-        Ok(())
+            .try_send()?)
     }
 
     /// Get an issue by number.
@@ -196,25 +241,36 @@ impl Client {
 
 mod error {
     use github_rs::errors::Error as GithubError;
-    use reqwest::Error as ReqwestError;
+    use reqwest::{Error as ReqwestError, StatusCode, UrlError};
     use snafu::Snafu;
 
     #[derive(Debug, Snafu)]
     #[snafu(visibility = "pub")]
     pub enum Error {
-        #[snafu(display("Bad request to Decadog: {}", description))]
-        BadRequest { description: String },
+        #[snafu(display("Decadog config error: {}", description))]
+        Config { description: String },
 
-        #[snafu(display("Github client error: {}", source))]
-        Github { source: GithubError },
+        #[snafu(display("Github error: {}", description))]
+        Github {
+            description: String,
+            status: StatusCode,
+        },
 
         #[snafu(display("Reqwest error: {}", source))]
         Reqwest { source: ReqwestError },
+
+        #[snafu(display("Url parse error: {}", source))]
+        Url { source: UrlError },
+
+        #[snafu(display("To be removed: {}", description))]
+        Old { description: String },
+        #[snafu(display("Github client error: {}", source))]
+        GithubOld { source: GithubError },
     }
 
     impl From<GithubError> for Error {
         fn from(source: GithubError) -> Self {
-            Error::Github { source }
+            Error::GithubOld { source }
         }
     }
 
@@ -224,11 +280,17 @@ mod error {
         }
     }
 
+    impl From<UrlError> for Error {
+        fn from(source: UrlError) -> Self {
+            Error::Url { source }
+        }
+    }
+
     // TODO this error cast is very general and should be removed
     // to manual casting if need be
     impl From<String> for Error {
         fn from(source: String) -> Self {
-            Error::BadRequest {
+            Error::Old {
                 description: source,
             }
         }
@@ -246,13 +308,33 @@ mod tests {
 
     #[test]
     fn invalid_github_token() {
-        assert!(Client::new("my_secret_token").is_ok());
-        match Client::new("invalid header char -> \n").unwrap_err() {
-            Error::BadRequest { description } => assert_eq!(
+        assert!(Client::new("my_secret_token", "foo", "bar").is_ok());
+        match Client::new("invalid header char -> \n", "foo", "bar").unwrap_err() {
+            Error::Config { description } => assert_eq!(
                 description,
                 "Invalid Github token for Authorization header."
             ),
             _ => panic!("Unexpected error"),
         }
+    }
+
+    #[test]
+    fn client_equality_by_args() {
+        assert!(
+            Client::new("my_secret_token", "foo", "bar").unwrap()
+                == Client::new("my_secret_token", "foo", "bar").unwrap()
+        );
+        assert!(
+            Client::new("my_secret_token", "foo", "bar").unwrap()
+                != Client::new("other", "foo", "bar").unwrap()
+        );
+        assert!(
+            Client::new("my_secret_token", "foo", "bar").unwrap()
+                != Client::new("my_secret_token", "other", "bar").unwrap()
+        );
+        assert!(
+            Client::new("my_secret_token", "foo", "bar").unwrap()
+                != Client::new("my_secret_token", "foo", "other").unwrap()
+        );
     }
 }

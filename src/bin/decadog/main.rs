@@ -1,5 +1,5 @@
 use clap::App;
-use log::error;
+use log::{debug, error};
 
 mod error;
 mod sprint;
@@ -8,6 +8,7 @@ pub use error::{Error, Result};
 
 pub fn main() -> Result<(), Error> {
     env_logger::init();
+    debug!("Initialised logger.");
 
     let mut app = App::new("decadog")
         .about("Github toolkit. Octocat++.")
