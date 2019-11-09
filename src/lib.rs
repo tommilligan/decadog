@@ -2,10 +2,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
 
-use github_rs::client::{Executor, Github};
-use github_rs::StatusCode;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
-use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
+use reqwest::{Client as ReqwestClient, IntoUrl, Method, RequestBuilder, Url, UrlError};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
@@ -28,7 +26,6 @@ pub struct IssuePatchAssignees {
 /// Decadog client, used to abstract complex tasks over the Github API.
 pub struct Client<'a> {
     id: u64,
-    github_client: Github,
     reqwest_client: ReqwestClient,
     reqwest_headers: HeaderMap,
 
@@ -48,33 +45,6 @@ impl<'a> PartialEq for Client<'a> {
         self.id == other.id
     }
 }
-
-trait TryExecute: Executor {
-    fn try_execute<'de, T>(self) -> Result<T, String>
-    where
-        Self: Sized,
-        T: DeserializeOwned,
-    {
-        #[derive(Deserialize)]
-        struct GithubError {
-            message: String,
-        }
-
-        match self.execute() {
-            Ok((_, StatusCode::OK, Some(response))) => serde_json::from_value::<T>(response)
-                .map_err(|err| format!("Failed to parse value response: {}", err))
-                .and_then(|value| Ok(value)),
-            Ok((_, _, Some(response))) => serde_json::from_value::<GithubError>(response)
-                .map_err(|err| format!("Failed to parse error response: {}", err))
-                .and_then(|error| Err(error.message.into())),
-            Ok((_, _, None)) => Err("Received error response from github with no message".into()),
-            Err(err) => Err(format!("Failed to execute request: {}", err)),
-        }
-    }
-}
-
-impl<'a> TryExecute for ::github_rs::repos::get::IssuesNumber<'a> {}
-impl<'a> TryExecute for ::github_rs::orgs::get::OrgsOrgMembers<'a> {}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct ClientErrorDetail {
@@ -124,10 +94,7 @@ impl TrySend for RequestBuilder {
 impl<'a> Client<'a> {
     /// Create a new client that can make requests to the Github API using token auth.
     pub fn new(token: &str, owner: &'a str, repo: &'a str) -> Result<Client<'a>, Error> {
-        // Nice github API
-        let github_client = Github::new(token)?;
-
-        // Raw REST endpoints
+        // Create reqwest client to interact with APIs
         let reqwest_client = reqwest::Client::new();
         let mut reqwest_headers = HeaderMap::new();
         reqwest_headers.insert(
@@ -152,7 +119,6 @@ impl<'a> Client<'a> {
 
         Ok(Client {
             id,
-            github_client,
             reqwest_client,
             reqwest_headers,
 
@@ -170,16 +136,18 @@ impl<'a> Client<'a> {
         self.repo
     }
 
-    pub fn request(&self, method: Method, url: &str) -> Result<RequestBuilder, UrlError> {
+    pub fn request<U: IntoUrl>(&self, method: Method, url: U) -> Result<RequestBuilder, UrlError> {
         Ok(self
             .reqwest_client
-            .request(method, self.repo_url.join(url)?)
+            .request(method, url)
             .headers(self.reqwest_headers.clone()))
     }
 
     /// Get a milestones from the API.
     pub fn get_milestones(&self) -> Result<Vec<Milestone>, Error> {
-        Ok(self.request(Method::GET, "milestones")?.try_send()?)
+        Ok(self
+            .request(Method::GET, self.repo_url.join("milestones")?)?
+            .try_send()?)
     }
 
     /// Assign an issue to a milestone.
@@ -191,7 +159,10 @@ impl<'a> Client<'a> {
         milestone: &Milestone,
     ) -> Result<Issue, Error> {
         Ok(self
-            .request(Method::PATCH, &format!("issues/{}", issue.number))?
+            .request(
+                Method::PATCH,
+                self.repo_url.join(&format!("issues/{}", issue.number))?,
+            )?
             .json(&IssuePatchMilestone {
                 milestone: milestone.number,
             })
@@ -207,7 +178,10 @@ impl<'a> Client<'a> {
         issue: &Issue,
     ) -> Result<Issue, Error> {
         Ok(self
-            .request(Method::PATCH, &format!("issues/{}", issue.number))?
+            .request(
+                Method::PATCH,
+                self.repo_url.join(&format!("issues/{}", issue.number))?,
+            )?
             .json(&IssuePatchAssignees {
                 assignees: vec![member.login.clone()],
             })
@@ -217,30 +191,25 @@ impl<'a> Client<'a> {
     /// Get an issue by number.
     pub fn get_issue_by_number(&self, number: &str) -> Result<Issue, Error> {
         Ok(self
-            .github_client
-            .get()
-            .repos()
-            .owner("reinfer")
-            .repo("platform")
-            .issues()
-            .number(&number)
-            .try_execute::<Issue>()?)
+            .request(
+                Method::GET,
+                self.repo_url.join(&format!("issues/{}", number))?,
+            )?
+            .try_send()?)
     }
 
     /// Get a milestones from the API.
     pub fn get_members(&self) -> Result<Vec<OrganisationMember>, Error> {
         Ok(self
-            .github_client
-            .get()
-            .orgs()
-            .org("reinfer")
-            .members()
-            .try_execute::<Vec<OrganisationMember>>()?)
+            .request(
+                Method::GET,
+                &format!("https://api.github.com/orgs/{}/members", self.owner),
+            )?
+            .try_send()?)
     }
 }
 
 mod error {
-    use github_rs::errors::Error as GithubError;
     use reqwest::{Error as ReqwestError, StatusCode, UrlError};
     use snafu::Snafu;
 
@@ -261,17 +230,6 @@ mod error {
 
         #[snafu(display("Url parse error: {}", source))]
         Url { source: UrlError },
-
-        #[snafu(display("To be removed: {}", description))]
-        Old { description: String },
-        #[snafu(display("Github client error: {}", source))]
-        GithubOld { source: GithubError },
-    }
-
-    impl From<GithubError> for Error {
-        fn from(source: GithubError) -> Self {
-            Error::GithubOld { source }
-        }
     }
 
     impl From<ReqwestError> for Error {
@@ -283,16 +241,6 @@ mod error {
     impl From<UrlError> for Error {
         fn from(source: UrlError) -> Self {
             Error::Url { source }
-        }
-    }
-
-    // TODO this error cast is very general and should be removed
-    // to manual casting if need be
-    impl From<String> for Error {
-        fn from(source: String) -> Self {
-            Error::Old {
-                description: source,
-            }
         }
     }
 }
