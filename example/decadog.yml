@@ -1,0 +1,8 @@
+version: 1
+
+# Any setting may also be set with environment variables
+# such as DECADOG_GITHUB_TOKEN
+github_token: 0000000000000000000000000000000000000000
+
+owner: octocat
+repo: Hello-World

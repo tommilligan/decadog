@@ -6,14 +6,20 @@ Github toolkit. Octocat++.
 
 ## Installation
 
-`git clone` followed by `cargo run`
+Install using `cargo`:
 
-## Usage
+```bash
+cargo install --git https://github.com/tommilligan/decadog
+```
+
+## Use
 
 You will need a Github API token (probably a PAT token). You can generate this from
-the settings page in the Github API. Currently, the scope of the project is `repo`.
+the settings page in the Github API. You should grant the scope `repo`.
 
-Set this token in the environment as `GITHUB_TOKEN` before running.
+Set this token in the environment as `DECADOG_GITHUB_TOKEN`.
+
+See the [example configuration file](./tree/master/example/decadog.yml). This file should be in your current working directory.
 
 ### Start Sprint
 
@@ -36,9 +42,9 @@ It will:
   - [x] Assign to milestone
   - [x] Assign to users
     - [x] Fuzzy aided selection of users from cli
-- [ ] CLI interface
+- [x] CLI interface
   - [x] make this one subcommand
-  - [ ] parameterise owner/repo fields
-  - [ ] config file for frequent use, from pwd
+  - [x] parameterise owner/repo fields
+  - [x] config file for frequent use, from pwd
 - [x] Error handling
   - [x] Verify response of assignment

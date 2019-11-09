@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::env;
 
 use clap::{App, ArgMatches, SubCommand};
 use decadog::{AssignedTo, Client, OrganisationMember};
@@ -7,13 +6,10 @@ use dialoguer::{Confirmation, Input, Select};
 use log::{error, info};
 use scout;
 
-use crate::error::Error;
+use crate::{error::Error, Settings};
 
-fn start_sprint() -> Result<(), Error> {
-    // Load token from env
-    let github_token = env::var("GITHUB_TOKEN").expect("No GITHUB_TOKEN");
-
-    let client = Client::new(&github_token, "reinfer", "platform")?;
+fn start_sprint(settings: &Settings) -> Result<(), Error> {
+    let client = Client::new(&settings.github_token, &settings.owner, &settings.repo)?;
 
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;
@@ -95,11 +91,11 @@ fn start_sprint() -> Result<(), Error> {
     }
 }
 
-pub fn execute(matches: &ArgMatches) -> Result<(), Error> {
+pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {
     if let (subcommand_name, Some(_)) = matches.subcommand() {
         match subcommand_name {
             "start" => {
-                start_sprint()?;
+                start_sprint(settings)?;
             }
             _ => error!("Invalid subcommand."),
         }
