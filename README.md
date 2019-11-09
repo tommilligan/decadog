@@ -37,8 +37,8 @@ It will:
   - [x] Assign to users
     - [x] Fuzzy aided selection of users from cli
 - [ ] CLI interface
-  - [ ] make this one subcommand
+  - [x] make this one subcommand
   - [ ] parameterise owner/repo fields
   - [ ] config file for frequent use, from pwd
-- [\] Error handling
-  - [ ] Verify response of assignment
+- [x] Error handling
+  - [x] Verify response of assignment
