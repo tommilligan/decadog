@@ -60,6 +60,7 @@ struct ClientErrorBody {
     pub documentation_url: Option<String>,
 }
 
+/// Send a HTTP request to an API, and return the resulting struct.
 trait TrySend {
     fn try_send<T>(self) -> Result<T, Error>
     where
@@ -219,7 +220,7 @@ mod error {
         #[snafu(display("Decadog config error: {}", description))]
         Config { description: String },
 
-        #[snafu(display("Github error: {}", description))]
+        #[snafu(display("Github error [{}]: {}", status, description))]
         Github {
             description: String,
             status: StatusCode,
@@ -246,8 +247,6 @@ mod error {
 }
 pub use error::Error;
 
-pub type Result<T, E = Error> = std::result::Result<T, E>;
-
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
@@ -268,21 +267,21 @@ mod tests {
 
     #[test]
     fn client_equality_by_args() {
-        assert!(
+        assert_eq!(
+            Client::new("my_secret_token", "foo", "bar").unwrap(),
             Client::new("my_secret_token", "foo", "bar").unwrap()
-                == Client::new("my_secret_token", "foo", "bar").unwrap()
         );
-        assert!(
-            Client::new("my_secret_token", "foo", "bar").unwrap()
-                != Client::new("other", "foo", "bar").unwrap()
+        assert_ne!(
+            Client::new("my_secret_token", "foo", "bar").unwrap(),
+            Client::new("other", "foo", "bar").unwrap()
         );
-        assert!(
-            Client::new("my_secret_token", "foo", "bar").unwrap()
-                != Client::new("my_secret_token", "other", "bar").unwrap()
+        assert_ne!(
+            Client::new("my_secret_token", "foo", "bar").unwrap(),
+            Client::new("my_secret_token", "other", "bar").unwrap()
         );
-        assert!(
-            Client::new("my_secret_token", "foo", "bar").unwrap()
-                != Client::new("my_secret_token", "foo", "other").unwrap()
+        assert_ne!(
+            Client::new("my_secret_token", "foo", "bar").unwrap(),
+            Client::new("my_secret_token", "foo", "other").unwrap()
         );
     }
 }
