@@ -5,4 +5,5 @@ dev:
 
 test:
 	cargo fmt -- --check
-	cargo test --locked
+	cargo test --all --locked
+	cargo test --all --all-features --locked

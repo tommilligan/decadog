@@ -31,7 +31,7 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
 
     let milestone = &milestones[selection];
 
-    info!("Loading organisation memebers...");
+    debug!("Loading organisation members");
     let organisation_members = client.get_members()?;
     let members_by_login: HashMap<String, OrganisationMember> = organisation_members
         .into_iter()

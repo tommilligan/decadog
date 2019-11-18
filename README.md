@@ -12,6 +12,51 @@ Install using `cargo`:
 cargo install --git https://github.com/tommilligan/decadog
 ```
 
+### Configuration
+
+`decadog` can be configured in several ways:
+
+#### `decadog.yml`
+
+A `decadog.yml` file in the current working directory. The specification is:
+
+```yaml
+version: 1
+
+owner: Github username/organisation name
+repo: Github repository
+
+github_token: Github PAT token
+zenhub_token: Zenhub API token (optional)
+```
+
+#### Environment variables
+
+Any setting from the config file above can be set by a variable in all caps,
+prefixed with `DECADOG_`, such as:
+
+```bash
+export DECADOG_GITHUB_TOKEN=abcdef...
+```
+
+#### OS Keyring (secrets only)
+
+You will need to compile with `config_keyring` for this to work.
+
+```bash
+cargo build --release --bins --features config_keyring
+```
+
+On Linux, you can set the appropriate secrets by running:
+
+```bash
+secret-tool store --label='decadog_github_token' application rust-keyring service decadog_github_token username decadog
+# interactive password prompt...
+
+secret-tool store --label='decadog_zenhub_token' application rust-keyring service decadog_zenhub_token username decadog
+# interactive password prompt...
+```
+
 ## Use
 
 You will need a Github API token. You can generate this from the [Settings > Tokens](https://github.com/settings/tokens) page in the Github UI.
