@@ -3,13 +3,23 @@ use std::collections::HashMap;
 use clap::{App, ArgMatches, SubCommand};
 use decadog::{AssignedTo, Client, OrganisationMember};
 use dialoguer::{Confirmation, Input, Select};
-use log::{error, info};
+use log::{debug, error};
 use scout;
 
 use crate::{error::Error, Settings};
 
 fn start_sprint(settings: &Settings) -> Result<(), Error> {
-    let client = Client::new(&settings.github_token, &settings.owner, &settings.repo)?;
+    let client = Client::new(
+        &settings.owner,
+        &settings.repo,
+        &settings.github_token,
+        settings.zenhub_token.as_ref().ok_or(Error::Settings {
+            description: "Zenhub token required to start sprint.".to_owned(),
+        })?,
+    )?;
+
+    let repository = client.get_repository()?;
+    eprintln!("{:?}", repository);
 
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;

@@ -9,6 +9,35 @@ pub trait AssignedTo<T> {
     fn assigned_to(&self, assignable: &T) -> bool;
 }
 
+/// A Zenhub estimate.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct Estimate {
+    value: u32,
+}
+
+/// A Zenhub reference to an issue.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct PipelineIssue {
+    issue_number: u32,
+    is_epic: bool,
+    position: u32,
+    estimate: Estimate,
+}
+
+/// A Zenhub pipeline.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct Pipeline {
+    id: String,
+    name: String,
+    issues: PipelineIssue,
+}
+
+/// A Zenhub board.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct Board {
+    pipelines: Vec<Pipeline>,
+}
+
 /// A Github Milestone.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Milestone {
@@ -42,6 +71,13 @@ pub struct Issue {
     pub title: String,
     pub milestone: Option<Milestone>,
     pub assignees: Vec<OrganisationMember>,
+}
+
+/// A Github Repository.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct Repository {
+    pub id: u32,
+    pub name: String,
 }
 
 impl fmt::Display for Milestone {
