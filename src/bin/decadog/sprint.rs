@@ -121,7 +121,7 @@ impl<'a> MilestoneManager<'a> {
         eprintln!("{}", issue);
 
         // If already assigned to the target milestone, no-op
-        if issue.assigned_to(&self.milestone) {
+        if issue.assigned_to(self.milestone) {
             eprintln!("Already in milestone.");
         } else {
             // Otherwise, confirm the assignment
@@ -140,9 +140,14 @@ impl<'a> MilestoneManager<'a> {
             pipeline_id: pipeline.id.clone(),
             position: "top".to_owned(),
         };
-        debug!("Moving {} to {:?}", issue.number, position);
-        self.client
-            .move_issue(&self.repository, &issue, &position)?;
+
+        if issue.assigned_to(pipeline) {
+            eprintln!("Already in pipeline.");
+        } else {
+            debug!("Moving {} to {:?}", issue.number, position);
+            self.client
+                .move_issue(&self.repository, &issue, &position)?;
+        }
 
         let update_assignment = if issue.assignees.len() == 0 {
             // If we do not have an assignee, default to updating assignment

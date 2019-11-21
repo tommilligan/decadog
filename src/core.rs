@@ -118,6 +118,15 @@ impl AssignedTo<Milestone> for Issue {
     }
 }
 
+impl AssignedTo<Pipeline> for Issue {
+    fn assigned_to(&self, assignable: &Pipeline) -> bool {
+        assignable
+            .issues
+            .iter()
+            .any(|issue| issue.issue_number == self.number)
+    }
+}
+
 impl AssignedTo<Issue> for OrganisationMember {
     fn assigned_to(&self, assignable: &Issue) -> bool {
         assignable
