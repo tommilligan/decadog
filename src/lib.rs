@@ -9,7 +9,9 @@ use serde_derive::{Deserialize, Serialize};
 
 mod core;
 
-pub use crate::core::{AssignedTo, Board, Issue, Milestone, OrganisationMember, Repository};
+pub use crate::core::{
+    AssignedTo, Board, Issue, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
+};
 
 /// Updates an Issue milestone.
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -49,32 +51,29 @@ impl<'a> PartialEq for Client<'a> {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct ClientErrorDetail {
+pub struct GithubClientErrorDetail {
     pub resource: String,
     pub field: String,
     pub code: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct ClientErrorBody {
+pub struct GithubClientErrorBody {
     pub message: String,
-    pub errors: Option<Vec<ClientErrorDetail>>,
+    pub errors: Option<Vec<GithubClientErrorDetail>>,
     pub documentation_url: Option<String>,
 }
 
-struct Github;
-struct Zenhub;
-
-/// Send a HTTP request to an API, and return the resulting struct.
-trait TrySend {
-    fn try_send<T>(self) -> Result<T, Error>
+/// Send a HTTP request to Github, and return the resulting struct.
+trait SendGithubExt {
+    fn send_github<T>(self) -> Result<T, Error>
     where
         Self: Sized,
         T: DeserializeOwned;
 }
 
-impl TrySend for RequestBuilder {
-    fn try_send<T>(self) -> Result<T, Error>
+impl SendGithubExt for RequestBuilder {
+    fn send_github<T>(self) -> Result<T, Error>
     where
         Self: Sized,
         T: DeserializeOwned,
@@ -84,12 +83,70 @@ impl TrySend for RequestBuilder {
         if status.is_success() {
             Ok(response.json()?)
         } else if status.is_client_error() {
-            Err(Error::Github {
-                description: format!("Client error: {:?}", response.json::<ClientErrorBody>()?),
+            Err(Error::GithubClient {
+                error: response.json()?,
                 status,
             })
         } else {
-            Err(Error::Github {
+            Err(Error::Api {
+                description: format!("Unexpected response status code."),
+                status,
+            })
+        }
+    }
+}
+
+/// Send a HTTP request to Github, and return the resulting struct.
+trait SendZenhubExt {
+    fn send_zenhub<T>(self) -> Result<T, Error>
+    where
+        Self: Sized,
+        T: DeserializeOwned;
+
+    fn send_zenhub_no_response(self) -> Result<(), Error>
+    where
+        Self: Sized;
+}
+
+/// Send a HTTP request to Github, and return the resulting struct.
+impl SendZenhubExt for RequestBuilder {
+    fn send_zenhub<T>(self) -> Result<T, Error>
+    where
+        Self: Sized,
+        T: DeserializeOwned,
+    {
+        let mut response = self.send()?;
+        let status = response.status();
+        if status.is_success() {
+            Ok(response.json()?)
+        } else if status.is_client_error() {
+            Err(Error::ZenhubClient {
+                description: response.text()?,
+                status,
+            })
+        } else {
+            Err(Error::Api {
+                description: format!("Unexpected response status code."),
+                status,
+            })
+        }
+    }
+
+    fn send_zenhub_no_response(self) -> Result<(), Error>
+    where
+        Self: Sized,
+    {
+        let mut response = self.send()?;
+        let status = response.status();
+        if status.is_success() {
+            Ok(())
+        } else if status.is_client_error() {
+            Err(Error::ZenhubClient {
+                description: response.text()?,
+                status,
+            })
+        } else {
+            Err(Error::Api {
                 description: format!("Unexpected response status code."),
                 status,
             })
@@ -182,7 +239,26 @@ impl<'a> Client<'a> {
                 self.zenhub_url
                     .join(&format!("/p1/repositories/{}/board", repository.id))?,
             )?
-            .try_send()?)
+            .send_zenhub()?)
+    }
+
+    /// Move issue to a Zenhub pipeline.
+    pub fn move_issue(
+        &self,
+        repository: &Repository,
+        issue: &Issue,
+        position: &PipelinePosition,
+    ) -> Result<(), Error> {
+        Ok(self
+            .zenhub(
+                Method::POST,
+                self.zenhub_url.join(&format!(
+                    "/p1/repositories/{}/issues/{}/moves",
+                    repository.id, issue.number
+                ))?,
+            )?
+            .json(position)
+            .send_zenhub_no_response()?)
     }
 
     /// Get a repository from the API.
@@ -195,14 +271,14 @@ impl<'a> Client<'a> {
                     self.owner, self.repo
                 ))?,
             )?
-            .try_send()?)
+            .send_github()?)
     }
 
-    /// Get a milestones from the API.
+    /// Get milestones from the API.
     pub fn get_milestones(&self) -> Result<Vec<Milestone>, Error> {
         Ok(self
             .github(Method::GET, self.repo_url.join("milestones")?)?
-            .try_send()?)
+            .send_github()?)
     }
 
     /// Assign an issue to a milestone.
@@ -221,7 +297,7 @@ impl<'a> Client<'a> {
             .json(&IssuePatchMilestone {
                 milestone: milestone.number,
             })
-            .try_send()?)
+            .send_github()?)
     }
 
     /// Assign an organisation member to an issue.
@@ -240,7 +316,7 @@ impl<'a> Client<'a> {
             .json(&IssuePatchAssignees {
                 assignees: vec![member.login.clone()],
             })
-            .try_send()?)
+            .send_github()?)
     }
 
     /// Get an issue by number.
@@ -250,7 +326,7 @@ impl<'a> Client<'a> {
                 Method::GET,
                 self.repo_url.join(&format!("issues/{}", number))?,
             )?
-            .try_send()?)
+            .send_github()?)
     }
 
     /// Get a milestones from the API.
@@ -260,7 +336,7 @@ impl<'a> Client<'a> {
                 Method::GET,
                 &format!("https://api.github.com/orgs/{}/members", self.owner),
             )?
-            .try_send()?)
+            .send_github()?)
     }
 }
 
@@ -268,15 +344,23 @@ mod error {
     use reqwest::{Error as ReqwestError, StatusCode, UrlError};
     use snafu::Snafu;
 
+    use crate::GithubClientErrorBody;
+
     #[derive(Debug, Snafu)]
     #[snafu(visibility = "pub")]
     pub enum Error {
+        #[snafu(display("Api error [{}]: {}", status, description))]
+        Api {
+            description: String,
+            status: StatusCode,
+        },
+
         #[snafu(display("Decadog config error: {}", description))]
         Config { description: String },
 
-        #[snafu(display("Github error [{}]: {}", status, description))]
-        Github {
-            description: String,
+        #[snafu(display("Github error [{}]: {:?}", status, error))]
+        GithubClient {
+            error: GithubClientErrorBody,
             status: StatusCode,
         },
 
@@ -285,6 +369,12 @@ mod error {
 
         #[snafu(display("Url parse error: {}", source))]
         Url { source: UrlError },
+
+        #[snafu(display("Zenhub error [{}]: {}", status, description))]
+        ZenhubClient {
+            description: String,
+            status: StatusCode,
+        },
     }
 
     impl From<ReqwestError> for Error {

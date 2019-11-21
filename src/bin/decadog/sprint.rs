@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use clap::{App, ArgMatches, SubCommand};
-use decadog::{AssignedTo, Client, OrganisationMember};
+use decadog::{AssignedTo, Client, OrganisationMember, Pipeline, PipelinePosition};
 use dialoguer::{Confirmation, Input, Select};
-use log::{debug, error};
+use log::{debug, error, warn};
 use scout;
 
 use crate::{error::Error, Settings};
@@ -17,9 +17,6 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
             description: "Zenhub token required to start sprint.".to_owned(),
         })?,
     )?;
-
-    let repository = client.get_repository()?;
-    eprintln!("{:?}", repository);
 
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;
@@ -49,56 +46,97 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
         .collect();
     let member_logins: Vec<&str> = members_by_login.keys().map(|login| &login[..]).collect();
 
+    debug!("Loading repository");
+    let repository = client.get_repository()?;
+    debug!("Loading zenhub board");
+    let board = client.get_board(&repository)?;
+    let pipelines_by_name: HashMap<String, Pipeline> = board
+        .pipelines
+        .into_iter()
+        .map(|pipeline| (pipeline.name.clone(), pipeline))
+        .collect();
+    let pipeline_names: Vec<&str> = pipelines_by_name
+        .keys()
+        .map(|pipeline_name| &pipeline_name[..])
+        .collect();
+
     loop {
-        // Input an issue number
-        let issue_number = Input::<String>::new()
-            .with_prompt("Issue number")
-            .interact()?;
-
-        // Fetch the issue
-        let issue = client.get_issue_by_number(&issue_number)?;
-        eprintln!("{}", issue);
-
-        // If already assigned to the target milestone, no-op
-        if issue.assigned_to(&milestone) {
-            eprintln!("Already in milestone.");
-        } else {
-            // Otherwise, confirm the assignment
-            if Confirmation::new()
-                .with_text("Assign milestone?")
-                .interact()?
-            {
-                client.assign_issue_to_milestone(&issue, &milestone)?;
-            }
-        }
-
-        let assignment_prompt = if issue.assignees.len() == 0 {
-            "Assign member?".to_owned()
-        } else {
-            format!(
-                "Currently assigned to {}. Update?",
-                issue
-                    .assignees
-                    .iter()
-                    .map(|member| member.login.clone())
-                    .collect::<Vec<String>>()
-                    .join(", ")
-            )
-        };
-        if Confirmation::new()
-            .with_text(&assignment_prompt)
-            .interact()?
-        {
-            let member_login = scout::start(member_logins.clone(), vec![])?;
-            let organisation_member = match members_by_login.get(&member_login) {
-                Some(member_login) => member_login,
+        if Confirmation::new().with_text("Next pipeline?").interact()? {
+            let pipeline_name = scout::start(pipeline_names.clone(), vec![])?;
+            let pipeline = match pipelines_by_name.get(&pipeline_name) {
+                Some(pipeline_name) => pipeline_name,
                 None => continue,
             };
-            if !organisation_member.assigned_to(&issue) {
-                client.assign_member_to_issue(&organisation_member, &issue)?;
+
+            loop {
+                // Input an issue number
+                let issue_number = Input::<String>::new()
+                    .with_prompt("Issue number (q to quit)")
+                    .interact()?;
+
+                // Fetch the issue
+                if issue_number == "q" {
+                    break;
+                }
+
+                let issue = client.get_issue_by_number(&issue_number)?;
+                eprintln!("{}", issue);
+
+                // If already assigned to the target milestone, no-op
+                if issue.assigned_to(&milestone) {
+                    eprintln!("Already in milestone.");
+                } else {
+                    // Otherwise, confirm the assignment
+                    if Confirmation::new()
+                        .with_text("Assign milestone?")
+                        .interact()?
+                    {
+                        client.assign_issue_to_milestone(&issue, &milestone)?;
+                    } else {
+                        continue;
+                    }
+                }
+
+                let position = PipelinePosition {
+                    pipeline_id: pipeline.id.clone(),
+                    position: "top".to_owned(),
+                };
+                debug!("Moving {} to {:?}", issue.number, position);
+                client.move_issue(&repository, &issue, &position)?;
+
+                let assignment_prompt = if issue.assignees.len() == 0 {
+                    "Assign member?".to_owned()
+                } else {
+                    format!(
+                        "Currently assigned to {}. Update?",
+                        issue
+                            .assignees
+                            .iter()
+                            .map(|member| member.login.clone())
+                            .collect::<Vec<String>>()
+                            .join(", ")
+                    )
+                };
+                if Confirmation::new()
+                    .with_text(&assignment_prompt)
+                    .interact()?
+                {
+                    let member_login = scout::start(member_logins.clone(), vec![])?;
+                    let organisation_member = match members_by_login.get(&member_login) {
+                        Some(member_login) => member_login,
+                        None => continue,
+                    };
+                    if !organisation_member.assigned_to(&issue) {
+                        client.assign_member_to_issue(&organisation_member, &issue)?;
+                    }
+                }
             }
+        } else {
+            break;
         }
     }
+
+    Ok(())
 }
 
 pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {

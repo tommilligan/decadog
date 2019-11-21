@@ -12,30 +12,37 @@ pub trait AssignedTo<T> {
 /// A Zenhub estimate.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Estimate {
-    value: u32,
+    pub value: u32,
 }
 
 /// A Zenhub reference to an issue.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct PipelineIssue {
-    issue_number: u32,
-    is_epic: bool,
-    position: u32,
-    estimate: Estimate,
+    pub issue_number: u32,
+    pub estimate: Option<Estimate>,
+    pub is_epic: bool,
+    pub position: u32,
 }
 
 /// A Zenhub pipeline.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Pipeline {
-    id: String,
-    name: String,
-    issues: PipelineIssue,
+    pub id: String,
+    pub name: String,
+    pub issues: Vec<PipelineIssue>,
+}
+
+/// A position of an issue in a Zenhub pipeline.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct PipelinePosition {
+    pub pipeline_id: String,
+    pub position: String,
 }
 
 /// A Zenhub board.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Board {
-    pipelines: Vec<Pipeline>,
+    pub pipelines: Vec<Pipeline>,
 }
 
 /// A Github Milestone.
