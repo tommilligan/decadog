@@ -5,7 +5,7 @@ use decadog::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
 use dialoguer::{Confirmation, Input, Select};
-use log::{debug, error};
+use log::error;
 use scout;
 
 use crate::{error::Error, Settings};
@@ -52,7 +52,6 @@ enum LoopStatus {
 
 impl<'a> MilestoneManager<'a> {
     fn new(client: &'a Client<'a>, milestone: &'a Milestone) -> Result<Self, Error> {
-        debug!("Loading organisation members");
         let organisation_members = client.get_members()?;
         let members_by_login: HashMap<String, OrganisationMember> = organisation_members
             .into_iter()
@@ -60,10 +59,8 @@ impl<'a> MilestoneManager<'a> {
             .collect();
         let member_options = ScoutOptions::new(members_by_login);
 
-        debug!("Loading repository");
         let repository = client.get_repository()?;
 
-        debug!("Loading zenhub board");
         let board = client.get_board(&repository)?;
         let pipelines_by_name: HashMap<String, Pipeline> = board
             .pipelines
@@ -144,7 +141,6 @@ impl<'a> MilestoneManager<'a> {
         if issue.assigned_to(pipeline) {
             eprintln!("Already in pipeline.");
         } else {
-            debug!("Moving {} to {:?}", issue.number, position);
             self.client
                 .move_issue(&self.repository, &issue, &position)?;
         }
@@ -192,7 +188,7 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;
     if milestones.len() == 0 {
-        error!("No open milestones.");
+        eprintln!("No open milestones.");
         return Ok(());
     }
 

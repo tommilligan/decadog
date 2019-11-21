@@ -2,8 +2,9 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
 
+use log::debug;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
-use reqwest::{Client as ReqwestClient, IntoUrl, Method, RequestBuilder, Url, UrlError};
+use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
@@ -217,14 +218,16 @@ impl<'a> Client<'a> {
         self.repo
     }
 
-    pub fn github<U: IntoUrl>(&self, method: Method, url: U) -> Result<RequestBuilder, UrlError> {
+    pub fn github(&self, method: Method, url: Url) -> Result<RequestBuilder, UrlError> {
+        debug!("{} {}", method, url.as_str());
         Ok(self
             .reqwest_client
             .request(method, url)
             .headers(self.github_headers.clone()))
     }
 
-    pub fn zenhub<U: IntoUrl>(&self, method: Method, url: U) -> Result<RequestBuilder, UrlError> {
+    pub fn zenhub(&self, method: Method, url: Url) -> Result<RequestBuilder, UrlError> {
+        debug!("{} {}", method, url.as_str());
         Ok(self
             .reqwest_client
             .request(method, url)
@@ -334,7 +337,10 @@ impl<'a> Client<'a> {
         Ok(self
             .github(
                 Method::GET,
-                &format!("https://api.github.com/orgs/{}/members", self.owner),
+                Url::parse(&format!(
+                    "https://api.github.com/orgs/{}/members",
+                    self.owner
+                ))?,
             )?
             .send_github()?)
     }
