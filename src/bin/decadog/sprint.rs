@@ -1,12 +1,178 @@
 use std::collections::HashMap;
 
 use clap::{App, ArgMatches, SubCommand};
-use decadog::{AssignedTo, Client, OrganisationMember, Pipeline, PipelinePosition};
+use decadog::{
+    AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
+};
 use dialoguer::{Confirmation, Input, Select};
-use log::{debug, error, warn};
+use log::{debug, error};
 use scout;
 
 use crate::{error::Error, Settings};
+
+struct ScoutOptions<V> {
+    lookup: HashMap<String, V>,
+}
+
+/// A read-only HashMap, keyed by human readable description.
+impl<V> ScoutOptions<V> {
+    pub fn new(lookup: HashMap<String, V>) -> Self {
+        Self { lookup }
+    }
+
+    fn get(&self, key: &str) -> Option<&V> {
+        self.lookup.get(key)
+    }
+
+    fn keys(&self) -> Vec<&str> {
+        self.lookup.keys().map(|key| &**key).collect()
+    }
+
+    fn interact(&self) -> Result<&V, Error> {
+        let chosen_key = scout::start(self.keys(), vec![])?;
+        self.get(&chosen_key).ok_or(Error::User {
+            description: format!("Unknown pipeline choice '{}'", chosen_key),
+        })
+    }
+}
+
+struct MilestoneManager<'a> {
+    client: &'a Client<'a>,
+    milestone: &'a Milestone,
+
+    repository: Repository,
+    pipeline_options: ScoutOptions<Pipeline>,
+    member_options: ScoutOptions<OrganisationMember>,
+}
+
+enum LoopStatus {
+    Success,
+    Quit,
+}
+
+impl<'a> MilestoneManager<'a> {
+    fn new(client: &'a Client<'a>, milestone: &'a Milestone) -> Result<Self, Error> {
+        debug!("Loading organisation members");
+        let organisation_members = client.get_members()?;
+        let members_by_login: HashMap<String, OrganisationMember> = organisation_members
+            .into_iter()
+            .map(|member| (member.login.clone(), member))
+            .collect();
+        let member_options = ScoutOptions::new(members_by_login);
+
+        debug!("Loading repository");
+        let repository = client.get_repository()?;
+
+        debug!("Loading zenhub board");
+        let board = client.get_board(&repository)?;
+        let pipelines_by_name: HashMap<String, Pipeline> = board
+            .pipelines
+            .into_iter()
+            .map(|pipeline| (pipeline.name.clone(), pipeline))
+            .collect();
+        let pipeline_options = ScoutOptions::new(pipelines_by_name);
+
+        Ok(Self {
+            client,
+            milestone,
+            repository,
+            member_options,
+            pipeline_options,
+        })
+    }
+
+    fn manage(&self) -> Result<(), Error> {
+        loop {
+            match self.manage_pipeline() {
+                Ok(LoopStatus::Success) => continue,
+                Ok(LoopStatus::Quit) => return Ok(()),
+                Err(error) => error!("{}", error),
+            }
+        }
+    }
+
+    fn manage_pipeline(&self) -> Result<LoopStatus, Error> {
+        if Confirmation::new().with_text("Next pipeline?").interact()? {
+            let pipeline = self.pipeline_options.interact()?;
+            loop {
+                match self.manage_issue(pipeline) {
+                    Ok(LoopStatus::Success) => continue,
+                    Ok(LoopStatus::Quit) => return Ok(LoopStatus::Success),
+                    Err(error) => error!("{}", error),
+                }
+            }
+        } else {
+            Ok(LoopStatus::Quit)
+        }
+    }
+
+    fn manage_issue(&self, pipeline: &Pipeline) -> Result<LoopStatus, Error> {
+        // Input an issue number
+        let issue_number = Input::<String>::new()
+            .with_prompt("Issue number (q to quit)")
+            .interact()?;
+
+        // Fetch the issue
+        if issue_number == "q" {
+            return Ok(LoopStatus::Quit);
+        }
+
+        let issue = self.client.get_issue_by_number(&issue_number)?;
+        eprintln!("{}", issue);
+
+        // If already assigned to the target milestone, no-op
+        if issue.assigned_to(&self.milestone) {
+            eprintln!("Already in milestone.");
+        } else {
+            // Otherwise, confirm the assignment
+            if Confirmation::new()
+                .with_text("Assign to milestone?")
+                .interact()?
+            {
+                self.client
+                    .assign_issue_to_milestone(&issue, &self.milestone)?;
+            } else {
+                return Ok(LoopStatus::Success);
+            }
+        }
+
+        let position = PipelinePosition {
+            pipeline_id: pipeline.id.clone(),
+            position: "top".to_owned(),
+        };
+        debug!("Moving {} to {:?}", issue.number, position);
+        self.client
+            .move_issue(&self.repository, &issue, &position)?;
+
+        let update_assignment = if issue.assignees.len() == 0 {
+            // If we do not have an assignee, default to updating assignment
+            Confirmation::new().with_text("Assign member?").interact()?
+        } else {
+            // If we already have assignee(s), default to existing value
+            !Confirmation::new()
+                .with_text(&format!(
+                    "Assigned to {}; is this correct?",
+                    issue
+                        .assignees
+                        .iter()
+                        .map(|member| member.login.clone())
+                        .collect::<Vec<String>>()
+                        .join(", ")
+                ))
+                .interact()?
+        };
+
+        if update_assignment {
+            let organisation_member = self.member_options.interact()?;
+            if !organisation_member.assigned_to(&issue) {
+                self.client
+                    .assign_member_to_issue(&organisation_member, &issue)?;
+            };
+        }
+
+        Ok(LoopStatus::Success)
+    }
+}
 
 fn start_sprint(settings: &Settings) -> Result<(), Error> {
     let client = Client::new(
@@ -37,106 +203,8 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
         .interact()?;
 
     let milestone = &milestones[selection];
-
-    debug!("Loading organisation members");
-    let organisation_members = client.get_members()?;
-    let members_by_login: HashMap<String, OrganisationMember> = organisation_members
-        .into_iter()
-        .map(|member| (member.login.clone(), member))
-        .collect();
-    let member_logins: Vec<&str> = members_by_login.keys().map(|login| &login[..]).collect();
-
-    debug!("Loading repository");
-    let repository = client.get_repository()?;
-    debug!("Loading zenhub board");
-    let board = client.get_board(&repository)?;
-    let pipelines_by_name: HashMap<String, Pipeline> = board
-        .pipelines
-        .into_iter()
-        .map(|pipeline| (pipeline.name.clone(), pipeline))
-        .collect();
-    let pipeline_names: Vec<&str> = pipelines_by_name
-        .keys()
-        .map(|pipeline_name| &pipeline_name[..])
-        .collect();
-
-    loop {
-        if Confirmation::new().with_text("Next pipeline?").interact()? {
-            let pipeline_name = scout::start(pipeline_names.clone(), vec![])?;
-            let pipeline = match pipelines_by_name.get(&pipeline_name) {
-                Some(pipeline_name) => pipeline_name,
-                None => continue,
-            };
-
-            loop {
-                // Input an issue number
-                let issue_number = Input::<String>::new()
-                    .with_prompt("Issue number (q to quit)")
-                    .interact()?;
-
-                // Fetch the issue
-                if issue_number == "q" {
-                    break;
-                }
-
-                let issue = client.get_issue_by_number(&issue_number)?;
-                eprintln!("{}", issue);
-
-                // If already assigned to the target milestone, no-op
-                if issue.assigned_to(&milestone) {
-                    eprintln!("Already in milestone.");
-                } else {
-                    // Otherwise, confirm the assignment
-                    if Confirmation::new()
-                        .with_text("Assign milestone?")
-                        .interact()?
-                    {
-                        client.assign_issue_to_milestone(&issue, &milestone)?;
-                    } else {
-                        continue;
-                    }
-                }
-
-                let position = PipelinePosition {
-                    pipeline_id: pipeline.id.clone(),
-                    position: "top".to_owned(),
-                };
-                debug!("Moving {} to {:?}", issue.number, position);
-                client.move_issue(&repository, &issue, &position)?;
-
-                let assignment_prompt = if issue.assignees.len() == 0 {
-                    "Assign member?".to_owned()
-                } else {
-                    format!(
-                        "Currently assigned to {}. Update?",
-                        issue
-                            .assignees
-                            .iter()
-                            .map(|member| member.login.clone())
-                            .collect::<Vec<String>>()
-                            .join(", ")
-                    )
-                };
-                if Confirmation::new()
-                    .with_text(&assignment_prompt)
-                    .interact()?
-                {
-                    let member_login = scout::start(member_logins.clone(), vec![])?;
-                    let organisation_member = match members_by_login.get(&member_login) {
-                        Some(member_login) => member_login,
-                        None => continue,
-                    };
-                    if !organisation_member.assigned_to(&issue) {
-                        client.assign_member_to_issue(&organisation_member, &issue)?;
-                    }
-                }
-            }
-        } else {
-            break;
-        }
-    }
-
-    Ok(())
+    let milestone_manager = MilestoneManager::new(&client, milestone)?;
+    milestone_manager.manage()
 }
 
 pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {

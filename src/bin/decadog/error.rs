@@ -24,6 +24,9 @@ pub enum Error {
     #[snafu(display("Io error: {}", source))]
     Io { source: IoError },
 
+    #[snafu(display("User error: {}", description))]
+    User { description: String },
+
     #[snafu(display("Invalid settings: {}", description))]
     Settings { description: String },
 }
