@@ -5,6 +5,10 @@ jobs:
       - image: circleci/rust:latest
     steps:
       - checkout
+      - run:
+          name: install system dependencies
+          command: |
+            sudo apt-get install -yq libdbus-1-dev
       - restore_cache:
           keys:
             - cargo-cache-{{ arch }}-{{ checksum "Cargo.lock" }}-v1
