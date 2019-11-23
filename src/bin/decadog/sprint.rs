@@ -48,6 +48,7 @@ struct MilestoneManager<'a> {
 enum LoopStatus {
     Success,
     Quit,
+    NextPipeline,
 }
 
 impl<'a> MilestoneManager<'a> {
@@ -80,38 +81,29 @@ impl<'a> MilestoneManager<'a> {
 
     fn manage(&self) -> Result<(), Error> {
         loop {
-            match self.manage_pipeline() {
-                Ok(LoopStatus::Success) => continue,
-                Ok(LoopStatus::Quit) => return Ok(()),
-                Err(error) => error!("{}", error),
-            }
-        }
-    }
-
-    fn manage_pipeline(&self) -> Result<LoopStatus, Error> {
-        if Confirmation::new().with_text("Next pipeline?").interact()? {
             let pipeline = self.pipeline_options.interact()?;
             loop {
                 match self.manage_issue(pipeline) {
                     Ok(LoopStatus::Success) => continue,
-                    Ok(LoopStatus::Quit) => return Ok(LoopStatus::Success),
+                    Ok(LoopStatus::NextPipeline) => break,
+                    Ok(LoopStatus::Quit) => return Ok(()),
                     Err(error) => error!("{}", error),
                 }
             }
-        } else {
-            Ok(LoopStatus::Quit)
         }
     }
 
     fn manage_issue(&self, pipeline: &Pipeline) -> Result<LoopStatus, Error> {
         // Input an issue number
         let issue_number = Input::<String>::new()
-            .with_prompt("Issue number (q to quit)")
+            .with_prompt("Issue number (n: next pipeline, q: quit)")
             .interact()?;
 
         // Fetch the issue
         if issue_number == "q" {
             return Ok(LoopStatus::Quit);
+        } else if issue_number == "n" {
+            return Ok(LoopStatus::NextPipeline);
         }
 
         let issue = self.client.get_issue_by_number(&issue_number)?;
