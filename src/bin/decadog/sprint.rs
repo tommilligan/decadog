@@ -179,10 +179,14 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
     let client = Client::new(
         &settings.owner,
         &settings.repo,
-        &settings.github_token,
-        settings.zenhub_token.as_ref().ok_or(Error::Settings {
-            description: "Zenhub token required to start sprint.".to_owned(),
-        })?,
+        settings.github_token.as_ref(),
+        settings
+            .zenhub_token
+            .as_ref()
+            .ok_or(Error::Settings {
+                description: "Zenhub token required to start sprint.".to_owned(),
+            })?
+            .as_ref(),
     )?;
 
     // Select milestone to move tickets to

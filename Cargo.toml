@@ -25,6 +25,7 @@ config_keyring = ["keyring"]
 
 [dev-dependencies]
 pretty_assertions = "0.6.1"
+serde_test = "1.0.102"
 
 [profile.release]
 codegen-units = 1

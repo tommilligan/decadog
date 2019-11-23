@@ -9,6 +9,7 @@ use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
 mod core;
+pub mod secret;
 
 pub use crate::core::{
     AssignedTo, Board, Issue, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,

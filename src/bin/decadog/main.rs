@@ -1,5 +1,6 @@
 use clap::App;
 use config;
+use decadog::secret::Secret;
 #[cfg(feature = "config_keyring")]
 use keyring::Keyring;
 use log::{debug, error};
@@ -15,8 +16,8 @@ pub struct Settings {
     version: Option<u32>,
     owner: String,
     repo: String,
-    github_token: String,
-    zenhub_token: Option<String>,
+    github_token: Secret,
+    zenhub_token: Option<Secret>,
 }
 
 impl Settings {
