@@ -14,7 +14,7 @@ struct ScoutOptions<V> {
     lookup: HashMap<String, V>,
 }
 
-/// A read-only HashMap, keyed by human readable description.
+/// A read-only `HashMap`, keyed by human readable description.
 impl<V> ScoutOptions<V> {
     pub fn new(lookup: HashMap<String, V>) -> Self {
         Self { lookup }
@@ -137,7 +137,7 @@ impl<'a> MilestoneManager<'a> {
                 .move_issue(&self.repository, &issue, &position)?;
         }
 
-        let update_assignment = if issue.assignees.len() == 0 {
+        let update_assignment = if issue.assignees.is_empty() {
             // If we do not have an assignee, default to updating assignment
             Confirmation::new().with_text("Assign member?").interact()?
         } else {
@@ -183,7 +183,7 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
 
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;
-    if milestones.len() == 0 {
+    if milestones.is_empty() {
         eprintln!("No open milestones.");
         return Ok(());
     }

@@ -1,3 +1,5 @@
+#![warn(clippy::all)]
+
 use clap::App;
 use config;
 use decadog::secret::Secret;
@@ -21,7 +23,7 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn load() -> Result<Settings, config::ConfigError> {
+    pub fn load() -> Result<Self, config::ConfigError> {
         debug!("Loading settings");
 
         let mut settings = config::Config::default();
@@ -46,7 +48,7 @@ impl Settings {
         }
 
         // Print out our settings (as a HashMap)
-        let settings = settings.try_into::<Settings>()?;
+        let settings = settings.try_into::<Self>()?;
         debug!("Loaded settings: {:?}", settings);
         Ok(settings)
     }
