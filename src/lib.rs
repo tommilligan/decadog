@@ -1,3 +1,5 @@
+#![warn(clippy::all)]
+
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
@@ -91,7 +93,7 @@ impl SendGithubExt for RequestBuilder {
             })
         } else {
             Err(Error::Api {
-                description: format!("Unexpected response status code."),
+                description: "Unexpected response status code.".to_owned(),
                 status,
             })
         }
@@ -128,7 +130,7 @@ impl SendZenhubExt for RequestBuilder {
             })
         } else {
             Err(Error::Api {
-                description: format!("Unexpected response status code."),
+                description: "Unexpected response status code.".to_owned(),
                 status,
             })
         }
@@ -149,7 +151,7 @@ impl SendZenhubExt for RequestBuilder {
             })
         } else {
             Err(Error::Api {
-                description: format!("Unexpected response status code."),
+                description: "Unexpected response status code.".to_owned(),
                 status,
             })
         }
