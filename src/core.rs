@@ -95,15 +95,7 @@ impl fmt::Display for Milestone {
 
 impl fmt::Display for Issue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(milestone) = &self.milestone {
-            write!(
-                f,
-                "{} ({}) [{}]: {}",
-                self.number, self.state, milestone.title, self.title
-            )
-        } else {
-            write!(f, "{} ({}): {}", self.number, self.state, self.title)
-        }
+        write!(f, "{}: {}", self.number, self.title)
     }
 }
 

@@ -139,7 +139,9 @@ impl<'a> MilestoneManager<'a> {
 
         let update_assignment = if issue.assignees.is_empty() {
             // If we do not have an assignee, default to updating assignment
-            Confirmation::new().with_text("Assign member?").interact()?
+            !Confirmation::new()
+                .with_text("Leave unassigned?")
+                .interact()?
         } else {
             // If we already have assignee(s), default to existing value
             !Confirmation::new()
