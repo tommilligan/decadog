@@ -84,6 +84,7 @@ impl Serialize for Secret {
 
 #[cfg(test)]
 mod test {
+    use pretty_assertions::assert_eq;
     use serde_test::{assert_tokens, Token};
 
     use super::*;
@@ -91,7 +92,13 @@ mod test {
     #[test]
     fn test_ser_de() {
         let secret = Secret::new("secret_value".to_owned());
-
         assert_tokens(&secret, &[Token::Str("secret_value")]);
+    }
+
+    #[test]
+    fn test_format() {
+        let secret = Secret::new("secret_value".to_owned());
+        assert_eq!(format!("{}", &secret), "sec***");
+        assert_eq!(format!("{:?}", &secret), "Secret { value: sec*** }");
     }
 }

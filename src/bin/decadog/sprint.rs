@@ -1,22 +1,22 @@
-use std::collections::HashMap;
-
 use clap::{App, ArgMatches, SubCommand};
+use colored::Colorize;
 use decadog::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
 use dialoguer::{Confirmation, Input, Select};
+use indexmap::IndexMap;
 use log::error;
 use scout;
 
 use crate::{error::Error, Settings};
 
+/// A read-only `HashMap`, keyed by human readable description.
 struct ScoutOptions<V> {
-    lookup: HashMap<String, V>,
+    lookup: IndexMap<String, V>,
 }
 
-/// A read-only `HashMap`, keyed by human readable description.
 impl<V> ScoutOptions<V> {
-    pub fn new(lookup: HashMap<String, V>) -> Self {
+    pub fn new(lookup: IndexMap<String, V>) -> Self {
         Self { lookup }
     }
 
@@ -54,7 +54,7 @@ enum LoopStatus {
 impl<'a> MilestoneManager<'a> {
     fn new(client: &'a Client<'a>, milestone: &'a Milestone) -> Result<Self, Error> {
         let organisation_members = client.get_members()?;
-        let members_by_login: HashMap<String, OrganisationMember> = organisation_members
+        let members_by_login = organisation_members
             .into_iter()
             .map(|member| (member.login.clone(), member))
             .collect();
@@ -63,7 +63,7 @@ impl<'a> MilestoneManager<'a> {
         let repository = client.get_repository()?;
 
         let board = client.get_board(&repository)?;
-        let pipelines_by_name: HashMap<String, Pipeline> = board
+        let pipelines_by_name = board
             .pipelines
             .into_iter()
             .map(|pipeline| (pipeline.name.clone(), pipeline))
@@ -191,7 +191,7 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
     }
 
     let selection = Select::new()
-        .with_prompt("Select milestone")
+        .with_prompt("Sprint to start")
         .default(0)
         .items(
             &milestones
@@ -206,11 +206,124 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
     milestone_manager.manage()
 }
 
+fn finish_sprint(settings: &Settings) -> Result<(), Error> {
+    // To count as points in the sprint, the ticket must have been
+    // - closed in the sprint period
+    // - have points assigned
+    //
+    // For each ticket *closed* in the sprint time range (start to *now*)
+    // - if it has no milestone attached, prompt to attach to open milestone
+    // - if it has no points, prompt to assign estimate
+    //
+    // For each non-closed ticket in the sprint
+    // - print status, ask if correct
+
+    let client = Client::new(
+        &settings.owner,
+        &settings.repo,
+        settings.github_token.as_ref(),
+        settings
+            .zenhub_token
+            .as_ref()
+            .ok_or(Error::Settings {
+                description: "Zenhub token required to finish sprint.".to_owned(),
+            })?
+            .as_ref(),
+    )?;
+
+    let estimates: [u32; 7] = [0, 1, 2, 3, 5, 8, 13];
+
+    // Select milestone to close
+    let milestones = client.get_milestones()?;
+    if milestones.is_empty() {
+        eprintln!("No open milestones.");
+        return Ok(());
+    }
+
+    let selection = Select::new()
+        .with_prompt("Sprint to finish")
+        .default(0)
+        .items(
+            &milestones
+                .iter()
+                .map(|milestone| &milestone.title)
+                .collect::<Vec<&String>>(),
+        )
+        .interact()?;
+
+    let open_milestone = &milestones[selection];
+    let repository = client.get_repository()?;
+    let sprint = client.get_sprint(&repository, &open_milestone)?;
+
+    println!();
+    println!("{}", "Issues closed in the sprint timeframe:".bold());
+    for issue in client
+        .get_issues_closed_after(&sprint.start_date.start_date)?
+        .iter()
+    {
+        // If assigned to a different milestone, ignore
+        if let Some(milestone) = &issue.milestone {
+            if milestone.id != open_milestone.id {
+                continue;
+            };
+        };
+
+        println!("{}", &issue);
+
+        // If no milestone, ask to assign to open milestone
+        // If answer is no, ignore this issue
+        if issue.milestone.is_none() {
+            if Confirmation::new()
+                .with_text("Assign to milestone?")
+                .interact()?
+            {
+                client.assign_issue_to_milestone(&issue, &open_milestone)?;
+            } else {
+                continue;
+            }
+        };
+
+        let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
+        if zenhub_issue.estimate.is_none() {
+            let selection = Select::new()
+                .with_prompt("Estimate")
+                .default(0)
+                .items(
+                    &estimates
+                        .iter()
+                        .map(|estimate| estimate.to_string())
+                        .collect::<Vec<String>>(),
+                )
+                .interact()?;
+
+            let estimate = estimates[selection];
+            client.set_estimate(&repository, &issue, estimate)?;
+        }
+    }
+
+    println!();
+    println!("{}", "Issues open in sprint:".bold());
+    for issue in client.get_milestone_open_issues(&open_milestone)?.iter() {
+        println!("{}", issue);
+    }
+
+    if Confirmation::new().with_text("Close sprint?").interact()? {
+        error!("Closing sprint not implemented.")
+    } else {
+        return Ok(());
+    }
+
+    Ok(())
+}
+
 pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {
     if let (subcommand_name, Some(_)) = matches.subcommand() {
         match subcommand_name {
             "start" => {
                 start_sprint(settings)?;
+            }
+            "finish" => {
+                finish_sprint(settings)?;
             }
             _ => error!("Invalid subcommand."),
         }
@@ -225,4 +338,5 @@ pub fn subcommand<'a, 'b>() -> App<'a, 'b> {
             SubCommand::with_name("start")
                 .about("Assign issues to a sprint, and people to issues."),
         )
+        .subcommand(SubCommand::with_name("finish").about("Tidy up and close a sprint."))
 }

@@ -1,5 +1,6 @@
 use std::fmt;
 
+use chrono::{DateTime, FixedOffset};
 use serde_derive::{Deserialize, Serialize};
 
 /// Represents objects in the Github ontology that can be assigned to one another.
@@ -15,6 +16,18 @@ pub struct Estimate {
     pub value: u32,
 }
 
+/// Body to set a Zenhub estimate.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct SetEstimate {
+    pub estimate: u32,
+}
+
+impl From<u32> for SetEstimate {
+    fn from(estimate: u32) -> Self {
+        SetEstimate { estimate }
+    }
+}
+
 /// A Zenhub reference to an issue.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct PipelineIssue {
@@ -22,6 +35,13 @@ pub struct PipelineIssue {
     pub estimate: Option<Estimate>,
     pub is_epic: bool,
     pub position: u32,
+}
+
+/// Zenhub issue data.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct ZenhubIssue {
+    pub estimate: Option<Estimate>,
+    pub is_epic: bool,
 }
 
 /// A Zenhub pipeline.
@@ -46,12 +66,33 @@ pub struct Board {
 }
 
 /// A Github Milestone.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Milestone {
     pub id: u32,
     pub number: u32,
     pub title: String,
     pub state: String,
+    pub due_on: DateTime<FixedOffset>,
+}
+
+/// A Zenhub milestone StartDate.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct StartDate {
+    pub start_date: DateTime<FixedOffset>,
+}
+
+/// A sprint.
+#[derive(Debug, Clone)]
+pub struct Sprint<'a> {
+    pub milestone: &'a Milestone,
+    pub start_date: StartDate,
+}
+
+/// A response from the Github search API.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct GithubSearch<T> {
+    pub incomplete_results: bool,
+    pub items: Vec<T>,
 }
 
 /// A memeber reference in an Organisation.
@@ -70,7 +111,7 @@ pub struct User {
 }
 
 /// A Github Issue.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Issue {
     pub id: u32,
     pub number: u32,
@@ -78,6 +119,9 @@ pub struct Issue {
     pub title: String,
     pub milestone: Option<Milestone>,
     pub assignees: Vec<OrganisationMember>,
+    pub created_at: DateTime<FixedOffset>,
+    pub updated_at: DateTime<FixedOffset>,
+    pub closed_at: Option<DateTime<FixedOffset>>,
 }
 
 /// A Github Repository.
@@ -130,7 +174,43 @@ impl AssignedTo<Issue> for OrganisationMember {
 
 #[cfg(test)]
 mod tests {
+    use chrono::NaiveDateTime;
+    use lazy_static::lazy_static;
+
     use super::*;
+
+    lazy_static! {
+        static ref DEFAULT_DATETIME_FIXED: DateTime<FixedOffset> =
+            { DateTime::from_utc(NaiveDateTime::from_timestamp(0, 0), FixedOffset::east(0)) };
+    }
+
+    impl Default for Issue {
+        fn default() -> Self {
+            Issue {
+                id: Default::default(),
+                number: Default::default(),
+                state: Default::default(),
+                title: Default::default(),
+                milestone: Default::default(),
+                assignees: Default::default(),
+                created_at: *DEFAULT_DATETIME_FIXED,
+                updated_at: *DEFAULT_DATETIME_FIXED,
+                closed_at: Some(*DEFAULT_DATETIME_FIXED),
+            }
+        }
+    }
+
+    impl Default for Milestone {
+        fn default() -> Self {
+            Milestone {
+                id: Default::default(),
+                number: Default::default(),
+                title: Default::default(),
+                state: Default::default(),
+                due_on: *DEFAULT_DATETIME_FIXED,
+            }
+        }
+    }
 
     #[test]
     fn issue_assigned_to_milestone() {
