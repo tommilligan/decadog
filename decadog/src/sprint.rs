@@ -1,6 +1,6 @@
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
-use decadog::{
+use decadog_core::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
 use dialoguer::{Confirmation, Input, Select};

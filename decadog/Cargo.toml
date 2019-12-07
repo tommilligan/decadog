@@ -1,0 +1,27 @@
+[package]
+name = "decadog"
+version = "0.1.0"
+authors = ["Tom Milligan <tom@reinfer.io>"]
+edition = "2018"
+
+[dependencies]
+decadog_core = { path = "../decadog_core" }
+
+clap = "2.33.0"
+colored = "1.9.0"
+config = { version = "0.9.3", default-features = false, features = ["yaml"] }
+dialoguer = "0.5.0"
+env_logger = "0.7.1"
+indexmap = "1.3.0"
+keyring = { version = "0.7.1", optional = true }
+log = "0.4.8"
+scout = "1.3.0"
+serde = "1.0.103"
+serde_derive = "1.0.103"
+snafu = "0.6.0"
+
+[features]
+default_features = ["config_keyring"]
+
+# Load sensitive configuration from system keyring
+config_keyring = ["keyring"]

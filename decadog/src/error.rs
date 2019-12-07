@@ -2,7 +2,7 @@ use std::io::Error as IoError;
 
 use clap::Error as ClapError;
 use config::ConfigError;
-use decadog::Error as DecadogError;
+use decadog_core::Error as DecadogError;
 use scout::errors::Error as ScoutError;
 use snafu::Snafu;
 

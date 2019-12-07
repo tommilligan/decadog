@@ -2,7 +2,7 @@
 
 use clap::App;
 use config;
-use decadog::secret::Secret;
+use decadog_core::secret::Secret;
 #[cfg(feature = "config_keyring")]
 use keyring::Keyring;
 use log::{debug, error};
