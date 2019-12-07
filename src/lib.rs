@@ -4,7 +4,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
 
-use log::debug;
+use chrono::{DateTime, FixedOffset};
+use log::{debug, error};
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
 use serde::de::DeserializeOwned;
@@ -14,7 +15,8 @@ mod core;
 pub mod secret;
 
 pub use crate::core::{
-    AssignedTo, Board, Issue, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
+    AssignedTo, Board, GithubSearch, Issue, Milestone, OrganisationMember, Pipeline,
+    PipelinePosition, Repository, SetEstimate, Sprint, StartDate, ZenhubIssue,
 };
 
 /// Updates an Issue milestone.
@@ -248,6 +250,72 @@ impl<'a> Client<'a> {
             .send_zenhub()?)
     }
 
+    /// Get Zenhub StartDate for a Github Milestone.
+    pub fn get_start_date(
+        &self,
+        repository: &Repository,
+        milestone: &Milestone,
+    ) -> Result<StartDate, Error> {
+        Ok(self
+            .zenhub(
+                Method::GET,
+                self.zenhub_url.join(&format!(
+                    "/p1/repositories/{}/milestones/{}/start_date",
+                    repository.id, milestone.number
+                ))?,
+            )?
+            .send_zenhub()?)
+    }
+
+    /// Get Zenhub issue metadata.
+    pub fn get_zenhub_issue(
+        &self,
+        repository: &Repository,
+        issue: &Issue,
+    ) -> Result<ZenhubIssue, Error> {
+        Ok(self
+            .zenhub(
+                Method::GET,
+                self.zenhub_url.join(&format!(
+                    "/p1/repositories/{}/issues/{}",
+                    repository.id, issue.number
+                ))?,
+            )?
+            .send_zenhub()?)
+    }
+
+    /// Set Zenhub issue estimate.
+    pub fn set_estimate(
+        &self,
+        repository: &Repository,
+        issue: &Issue,
+        estimate: u32,
+    ) -> Result<(), Error> {
+        Ok(self
+            .zenhub(
+                Method::PUT,
+                self.zenhub_url.join(&format!(
+                    "/p1/repositories/{}/issues/{}/estimate",
+                    repository.id, issue.number
+                ))?,
+            )?
+            .json(&SetEstimate::from(estimate))
+            .send_zenhub_no_response()?)
+    }
+
+    /// Get sprint for milestone.
+    pub fn get_sprint<'b>(
+        &self,
+        repository: &Repository,
+        milestone: &'b Milestone,
+    ) -> Result<Sprint<'b>, Error> {
+        let start_date = self.get_start_date(repository, milestone)?;
+        Ok(Sprint {
+            milestone,
+            start_date,
+        })
+    }
+
     /// Move issue to a Zenhub pipeline.
     pub fn move_issue(
         &self,
@@ -333,6 +401,63 @@ impl<'a> Client<'a> {
                 self.repo_url.join(&format!("issues/{}", number))?,
             )?
             .send_github()?)
+    }
+
+    /// Get issues closed after the given datetime.
+    pub fn get_issues_closed_after(
+        &self,
+        datetime: &DateTime<FixedOffset>,
+    ) -> Result<Vec<Issue>, Error> {
+        let results: GithubSearch<Issue> = self
+            .github(
+                Method::GET,
+                Url::parse("https://api.github.com/search/issues")?,
+            )?
+            .query(&[
+                (
+                    "q",
+                    format!(
+                        "repo:{}/{} type:issue state:closed closed:>={}",
+                        self.owner,
+                        self.repo,
+                        datetime.format("%Y-%m-%d")
+                    ),
+                ),
+                ("sort", "updated".to_owned()),
+                ("order", "asc".to_owned()),
+            ])
+            .send_github()?;
+        if results.incomplete_results {
+            // FIXME handle github pagination
+            error!("Incomplete results recieved from Github Search API, this is bad");
+        }
+        Ok(results.items)
+    }
+
+    /// Get issues open in a given milestone.
+    pub fn get_milestone_open_issues(&self, milestone: &Milestone) -> Result<Vec<Issue>, Error> {
+        let results: GithubSearch<Issue> = self
+            .github(
+                Method::GET,
+                Url::parse("https://api.github.com/search/issues")?,
+            )?
+            .query(&[
+                (
+                    "q",
+                    format!(
+                        r#"repo:{}/{} type:issue state:open milestone:"{}""#,
+                        self.owner, self.repo, milestone.title
+                    ),
+                ),
+                ("sort", "updated".to_owned()),
+                ("order", "asc".to_owned()),
+            ])
+            .send_github()?;
+        if results.incomplete_results {
+            // FIXME handle github pagination
+            error!("Incomplete results recieved from Github Search API, this is bad");
+        }
+        Ok(results.items)
     }
 
     /// Get a milestones from the API.
