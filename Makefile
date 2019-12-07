@@ -4,7 +4,7 @@ dev:
 	rustup component add rustfmt clippy
 
 test:
-	cargo fmt -- --check
-	cargo clippy --all-targets --all-features
+	cargo fmt --all -- --check
+	cargo clippy --all --all-targets --all-features
 	cargo test --all --locked
-	cargo test --all --all-features --locked
+	cargo test --all --no-default-features --locked

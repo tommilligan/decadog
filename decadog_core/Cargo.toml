@@ -1,0 +1,34 @@
+[package]
+name = "decadog"
+version = "0.1.0"
+authors = ["Tom Milligan <tom@reinfer.io>"]
+edition = "2018"
+
+[dependencies]
+chrono = { version = "0.4.10", features = ["serde"] }
+clap = "2.33.0"
+config = { version = "0.9.3", default-features = false, features = ["yaml"] }
+dialoguer = "0.5.0"
+env_logger = "0.7.1"
+keyring = { version = "0.7.1", optional = true }
+log = "0.4.8"
+reqwest = "0.9.22"
+scout = "1.3.0"
+serde = "1.0.102"
+serde_derive = "1.0.102"
+serde_json = "1.0.44"
+snafu = "0.6.0"
+indexmap = "1.3.0"
+colored = "1.9.0"
+
+
+[features]
+default_features = ["config_keyring"]
+
+config_keyring = ["keyring"]
+
+[dev-dependencies]
+pretty_assertions = "0.6.1"
+serde_test = "1.0.102"
+lazy_static = "1.4.0"
+
