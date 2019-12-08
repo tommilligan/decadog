@@ -1,3 +1,4 @@
+use std::io;
 use std::iter::FromIterator;
 
 use dialoguer;
@@ -64,7 +65,7 @@ impl<'a, V> Select<'a, V> {
         let selection_index = dialoguer::Select::new()
             .with_prompt(self.prompt)
             .default(0)
-            .items(&self.lookup.keys().map(|key| *key).collect::<Vec<&String>>())
+            .items(&self.lookup.keys().cloned().collect::<Vec<&String>>())
             .interact()?;
 
         Ok(self
@@ -72,6 +73,23 @@ impl<'a, V> Select<'a, V> {
             .get_index(selection_index)
             .expect("Selected index out of lookup bounds.")
             .1)
+    }
+}
+
+pub struct Confirmation<'a> {
+    confirmation: dialoguer::Confirmation<'a>,
+}
+
+impl<'a> Confirmation<'a> {
+    pub fn new(text: &'a str) -> Self {
+        let mut confirmation = dialoguer::Confirmation::new();
+        confirmation.with_text(text);
+
+        Self { confirmation }
+    }
+
+    pub fn interact(&self) -> Result<bool, io::Error> {
+        self.confirmation.interact()
     }
 }
 

@@ -3,11 +3,10 @@ use colored::Colorize;
 use decadog_core::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
-use dialoguer::Confirmation;
 use indexmap::IndexMap;
 use log::error;
 
-use crate::interact::{FuzzySelect, Input, Select};
+use crate::interact::{Confirmation, FuzzySelect, Input, Select};
 use crate::{error::Error, Settings};
 
 struct MilestoneManager<'a> {
@@ -86,10 +85,7 @@ impl<'a> MilestoneManager<'a> {
             eprintln!("Already in milestone.");
         } else {
             // Otherwise, confirm the assignment
-            if Confirmation::new()
-                .with_text("Assign to milestone?")
-                .interact()?
-            {
+            if Confirmation::new("Assign to milestone?").interact()? {
                 self.client
                     .assign_issue_to_milestone(&issue, &self.milestone)?;
             } else {
@@ -111,22 +107,19 @@ impl<'a> MilestoneManager<'a> {
 
         let update_assignment = if issue.assignees.is_empty() {
             // If we do not have an assignee, default to updating assignment
-            !Confirmation::new()
-                .with_text("Leave unassigned?")
-                .interact()?
+            !Confirmation::new("Leave unassigned?").interact()?
         } else {
             // If we already have assignee(s), default to existing value
-            !Confirmation::new()
-                .with_text(&format!(
-                    "Assigned to {}; is this correct?",
-                    issue
-                        .assignees
-                        .iter()
-                        .map(|member| member.login.clone())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ))
-                .interact()?
+            !Confirmation::new(&format!(
+                "Assigned to {}; is this correct?",
+                issue
+                    .assignees
+                    .iter()
+                    .map(|member| member.login.clone())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ))
+            .interact()?
         };
 
         if update_assignment {
@@ -202,7 +195,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
     let estimates: [u32; 7] = [0, 1, 2, 3, 5, 8, 13];
     let estimates_lookup: IndexMap<String, u32> = estimates
-        .into_iter()
+        .iter()
         .map(|estimate| (estimate.to_string(), *estimate))
         .collect();
     let select_estimate = Select::new("Estimate", estimates_lookup.iter())
@@ -245,10 +238,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         // If no milestone, ask to assign to open milestone
         // If answer is no, ignore this issue
         if issue.milestone.is_none() {
-            if Confirmation::new()
-                .with_text("Assign to milestone?")
-                .interact()?
-            {
+            if Confirmation::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, &open_milestone)?;
             } else {
                 continue;
@@ -268,7 +258,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         println!("{}", issue);
     }
 
-    if Confirmation::new().with_text("Close sprint?").interact()? {
+    if Confirmation::new("Close sprint?").interact()? {
         error!("Closing sprint not implemented.")
     } else {
         return Ok(());
