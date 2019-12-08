@@ -4,45 +4,18 @@ use decadog_core::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
 use dialoguer::{Confirmation, Input, Select};
-use indexmap::IndexMap;
 use log::error;
-use scout;
 
+use crate::interact::FuzzySelect;
 use crate::{error::Error, Settings};
-
-/// A read-only `HashMap`, keyed by human readable description.
-struct ScoutOptions<V> {
-    lookup: IndexMap<String, V>,
-}
-
-impl<V> ScoutOptions<V> {
-    pub fn new(lookup: IndexMap<String, V>) -> Self {
-        Self { lookup }
-    }
-
-    fn get(&self, key: &str) -> Option<&V> {
-        self.lookup.get(key)
-    }
-
-    fn keys(&self) -> Vec<&str> {
-        self.lookup.keys().map(|key| &**key).collect()
-    }
-
-    fn interact(&self) -> Result<&V, Error> {
-        let chosen_key = scout::start(self.keys(), vec![])?;
-        self.get(&chosen_key).ok_or(Error::User {
-            description: format!("Unknown pipeline choice '{}'", chosen_key),
-        })
-    }
-}
 
 struct MilestoneManager<'a> {
     client: &'a Client<'a>,
     milestone: &'a Milestone,
 
     repository: Repository,
-    pipeline_options: ScoutOptions<Pipeline>,
-    member_options: ScoutOptions<OrganisationMember>,
+    pipeline_options: FuzzySelect<Pipeline>,
+    member_options: FuzzySelect<OrganisationMember>,
 }
 
 enum LoopStatus {
@@ -54,21 +27,19 @@ enum LoopStatus {
 impl<'a> MilestoneManager<'a> {
     fn new(client: &'a Client<'a>, milestone: &'a Milestone) -> Result<Self, Error> {
         let organisation_members = client.get_members()?;
-        let members_by_login = organisation_members
+        let member_options: FuzzySelect<OrganisationMember> = organisation_members
             .into_iter()
             .map(|member| (member.login.clone(), member))
             .collect();
-        let member_options = ScoutOptions::new(members_by_login);
 
         let repository = client.get_repository()?;
 
         let board = client.get_board(&repository)?;
-        let pipelines_by_name = board
+        let pipeline_options: FuzzySelect<Pipeline> = board
             .pipelines
             .into_iter()
             .map(|pipeline| (pipeline.name.clone(), pipeline))
             .collect();
-        let pipeline_options = ScoutOptions::new(pipelines_by_name);
 
         Ok(Self {
             client,

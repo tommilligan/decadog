@@ -9,9 +9,11 @@ use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
 
 mod error;
-mod sprint;
+mod command;
+mod interact;
 
 pub use error::Error;
+use command::sprint;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Settings {
