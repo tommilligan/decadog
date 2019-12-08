@@ -139,14 +139,14 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
             .zenhub_url
             .as_ref()
             .ok_or(Error::Settings {
-                description: "Zenhub url required to finish sprint.".to_owned(),
+                description: "Zenhub url required to start sprint.".to_owned(),
             })?
             .as_ref(),
         settings
             .zenhub_token
             .as_ref()
             .ok_or(Error::Settings {
-                description: "Zenhub token required to finish sprint.".to_owned(),
+                description: "Zenhub token required to start sprint.".to_owned(),
             })?
             .as_ref(),
     )?;

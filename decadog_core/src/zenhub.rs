@@ -132,9 +132,7 @@ impl Client {
         self.request(
             Method::GET,
             self.base_url
-                .join("/p1/repositories")?
-                .join(&repository_id.to_string())?
-                .join("board")?,
+                .join(&format!("/p1/repositories/{}/board", repository_id))?,
         )?
         .send_api()
     }

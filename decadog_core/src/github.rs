@@ -121,19 +121,21 @@ impl Client {
     pub fn get_issue(&self, owner: &str, repo: &str, issue_number: u32) -> Result<Issue, Error> {
         self.request(
             Method::GET,
-            self.base_url
-                .join(owner)?
-                .join(repo)?
-                .join("issues")?
-                .join(&issue_number.to_string())?,
+            self.base_url.join(&format!(
+                "/repos/{}/{}/issues/{}",
+                owner, repo, issue_number
+            ))?,
         )?
         .send_github()
     }
 
     /// Get a repository by owner and repo name.
     pub fn get_repository(&self, owner: &str, repo: &str) -> Result<Repository, Error> {
-        self.request(Method::GET, self.base_url.join(owner)?.join(repo)?)?
-            .send_github()
+        self.request(
+            Method::GET,
+            self.base_url.join(&format!("/repos/{}/{}", owner, repo))?,
+        )?
+        .send_github()
     }
 
     /// Get members by organisation.
@@ -141,9 +143,7 @@ impl Client {
         self.request(
             Method::GET,
             self.base_url
-                .join("orgs")?
-                .join(organisation)?
-                .join("members")?,
+                .join(&format!("orgs/{}/members", organisation))?,
         )?
         .send_github()
     }
@@ -152,7 +152,8 @@ impl Client {
     pub fn get_milestones(&self, owner: &str, repo: &str) -> Result<Vec<Milestone>, Error> {
         self.request(
             Method::GET,
-            self.base_url.join(owner)?.join(repo)?.join("milestones")?,
+            self.base_url
+                .join(&format!("/repos/{}/{}/milestones", owner, repo))?,
         )?
         .send_github()
     }
@@ -167,11 +168,10 @@ impl Client {
     ) -> Result<Issue, Error> {
         self.request(
             Method::PATCH,
-            self.base_url
-                .join(owner)?
-                .join(repo)?
-                .join("issues")?
-                .join(&issue_number.to_string())?,
+            self.base_url.join(&format!(
+                "/repos/{}/{}/issues/{}",
+                owner, repo, issue_number
+            ))?,
         )?
         .json(update)
         .send_github()
@@ -180,7 +180,7 @@ impl Client {
     /// Search issues.
     pub fn search_issues(&self, query: &SearchIssues) -> Result<Vec<Issue>, Error> {
         let builder = self
-            .request(Method::GET, self.base_url.join("search")?.join("issues")?)?
+            .request(Method::GET, self.base_url.join("search/issues")?)?
             .query(&query);
 
         let results: GithubSearchResults<Issue> = builder.send_github()?;
