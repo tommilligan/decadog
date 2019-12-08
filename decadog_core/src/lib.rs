@@ -5,54 +5,39 @@ use std::fmt;
 use std::hash::Hasher;
 
 use chrono::{DateTime, FixedOffset};
-use log::{debug, error};
-use reqwest::header::{HeaderMap, AUTHORIZATION};
+use log::debug;
+use reqwest::header::HeaderMap;
 use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
 mod core;
+pub mod github;
 pub mod secret;
 
 pub use crate::core::{
-    AssignedTo, Board, GithubSearch, Issue, Milestone, OrganisationMember, Pipeline,
-    PipelinePosition, Repository, SetEstimate, Sprint, StartDate, ZenhubIssue,
+    AssignedTo, Board, Issue, Milestone, OrganisationMember, Pipeline, PipelinePosition,
+    Repository, SetEstimate, Sprint, StartDate, ZenhubIssue,
 };
 
-/// Updates an Issue milestone.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct IssuePatchMilestone {
-    pub milestone: u32,
-}
-
-/// Updates an Issue assignees.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct IssuePatchAssignees {
-    pub assignees: Vec<String>,
-}
+use github::{IssueUpdate, SearchIssues};
 
 /// Decadog client, used to abstract complex tasks over the Github API.
 pub struct Client<'a> {
     id: u64,
     reqwest_client: ReqwestClient,
-    github_headers: HeaderMap,
     zenhub_headers: HeaderMap,
 
     owner: &'a str,
     repo: &'a str,
-    repo_url: Url,
     zenhub_url: Url,
+
+    github: &'a github::Client,
 }
 
 impl<'a> fmt::Debug for Client<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Decadog client {}", self.id)
-    }
-}
-
-impl<'a> PartialEq for Client<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
     }
 }
 
@@ -165,21 +150,11 @@ impl<'a> Client<'a> {
     pub fn new(
         owner: &'a str,
         repo: &'a str,
-        github_token: &str,
-        zenhub_token: &str,
+        zenhub_token: &'a str,
+        github: &'a github::Client,
     ) -> Result<Client<'a>, Error> {
         // Create reqwest client to interact with APIs
         let reqwest_client = reqwest::Client::new();
-
-        let mut github_headers = HeaderMap::new();
-        github_headers.insert(
-            AUTHORIZATION,
-            format!("token {}", github_token)
-                .parse()
-                .map_err(|_| Error::Config {
-                    description: "Invalid Github token for Authorization header.".to_owned(),
-                })?,
-        );
 
         let mut zenhub_headers = HeaderMap::new();
         zenhub_headers.insert(
@@ -189,29 +164,24 @@ impl<'a> Client<'a> {
             })?,
         );
 
-        let repo_url = Url::parse(&format!("https://api.github.com/repos/{}/{}/", owner, repo))
-            .map_err(|_| Error::Config {
-                description: "Invalid owner or repo name.".to_owned(),
-            })?;
         let zenhub_url = Url::parse("https://api.zenhub.io/")?;
 
         let mut hasher = DefaultHasher::new();
         hasher.write(owner.as_bytes());
         hasher.write(repo.as_bytes());
-        hasher.write(github_token.as_bytes());
         hasher.write(zenhub_token.as_bytes());
         let id = hasher.finish();
 
         Ok(Client {
             id,
             reqwest_client,
-            github_headers,
             zenhub_headers,
 
             owner,
             repo,
-            repo_url,
             zenhub_url,
+
+            github,
         })
     }
 
@@ -221,14 +191,6 @@ impl<'a> Client<'a> {
 
     pub fn repo(&self) -> &str {
         self.repo
-    }
-
-    pub fn github(&self, method: Method, url: Url) -> Result<RequestBuilder, UrlError> {
-        debug!("{} {}", method, url.as_str());
-        Ok(self
-            .reqwest_client
-            .request(method, url)
-            .headers(self.github_headers.clone()))
     }
 
     pub fn zenhub(&self, method: Method, url: Url) -> Result<RequestBuilder, UrlError> {
@@ -337,22 +299,17 @@ impl<'a> Client<'a> {
 
     /// Get a repository from the API.
     pub fn get_repository(&self) -> Result<Repository, Error> {
-        Ok(self
-            .github(
-                Method::GET,
-                Url::parse(&format!(
-                    "https://api.github.com/repos/{}/{}",
-                    self.owner, self.repo
-                ))?,
-            )?
-            .send_github()?)
+        self.github.get_repository(self.owner, self.repo)
+    }
+
+    /// Get an issue from the API.
+    pub fn get_issue(&self, issue_number: u32) -> Result<Issue, Error> {
+        self.github.get_issue(self.owner, self.repo, issue_number)
     }
 
     /// Get milestones from the API.
     pub fn get_milestones(&self) -> Result<Vec<Milestone>, Error> {
-        Ok(self
-            .github(Method::GET, self.repo_url.join("milestones")?)?
-            .send_github()?)
+        self.github.get_milestones(self.owner, self.repo)
     }
 
     /// Assign an issue to a milestone.
@@ -363,15 +320,11 @@ impl<'a> Client<'a> {
         issue: &Issue,
         milestone: &Milestone,
     ) -> Result<Issue, Error> {
-        Ok(self
-            .github(
-                Method::PATCH,
-                self.repo_url.join(&format!("issues/{}", issue.number))?,
-            )?
-            .json(&IssuePatchMilestone {
-                milestone: milestone.number,
-            })
-            .send_github()?)
+        let mut update = IssueUpdate::default();
+        update.milestone = Some(milestone.number);
+
+        self.github
+            .patch_issue(&self.owner, &self.repo, issue.number, &update)
     }
 
     /// Assign an organisation member to an issue.
@@ -382,25 +335,11 @@ impl<'a> Client<'a> {
         member: &OrganisationMember,
         issue: &Issue,
     ) -> Result<Issue, Error> {
-        Ok(self
-            .github(
-                Method::PATCH,
-                self.repo_url.join(&format!("issues/{}", issue.number))?,
-            )?
-            .json(&IssuePatchAssignees {
-                assignees: vec![member.login.clone()],
-            })
-            .send_github()?)
-    }
+        let mut update = IssueUpdate::default();
+        update.assignees = Some(vec![member.login.clone()]);
 
-    /// Get an issue by number.
-    pub fn get_issue_by_number(&self, number: &str) -> Result<Issue, Error> {
-        Ok(self
-            .github(
-                Method::GET,
-                self.repo_url.join(&format!("issues/{}", number))?,
-            )?
-            .send_github()?)
+        self.github
+            .patch_issue(&self.owner, &self.repo, issue.number, &update)
     }
 
     /// Get issues closed after the given datetime.
@@ -408,69 +347,35 @@ impl<'a> Client<'a> {
         &self,
         datetime: &DateTime<FixedOffset>,
     ) -> Result<Vec<Issue>, Error> {
-        let results: GithubSearch<Issue> = self
-            .github(
-                Method::GET,
-                Url::parse("https://api.github.com/search/issues")?,
-            )?
-            .query(&[
-                (
-                    "q",
-                    format!(
-                        "repo:{}/{} type:issue state:closed closed:>={}",
-                        self.owner,
-                        self.repo,
-                        datetime.format("%Y-%m-%d")
-                    ),
-                ),
-                ("sort", "updated".to_owned()),
-                ("order", "asc".to_owned()),
-            ])
-            .send_github()?;
-        if results.incomplete_results {
-            // FIXME handle github pagination
-            error!("Incomplete results recieved from Github Search API, this is bad");
-        }
-        Ok(results.items)
+        let query = SearchIssues {
+            q: format!(
+                "repo:{}/{} type:issue state:closed closed:>={}",
+                self.owner,
+                self.repo,
+                datetime.format("%Y-%m-%d")
+            ),
+            sort: Some("updated".to_owned()),
+            order: Some("asc".to_owned()),
+        };
+        self.github.search_issues(&query)
     }
 
     /// Get issues open in a given milestone.
     pub fn get_milestone_open_issues(&self, milestone: &Milestone) -> Result<Vec<Issue>, Error> {
-        let results: GithubSearch<Issue> = self
-            .github(
-                Method::GET,
-                Url::parse("https://api.github.com/search/issues")?,
-            )?
-            .query(&[
-                (
-                    "q",
-                    format!(
-                        r#"repo:{}/{} type:issue state:open milestone:"{}""#,
-                        self.owner, self.repo, milestone.title
-                    ),
-                ),
-                ("sort", "updated".to_owned()),
-                ("order", "asc".to_owned()),
-            ])
-            .send_github()?;
-        if results.incomplete_results {
-            // FIXME handle github pagination
-            error!("Incomplete results recieved from Github Search API, this is bad");
-        }
-        Ok(results.items)
+        let query = SearchIssues {
+            q: format!(
+                r#"repo:{}/{} type:issue state:open milestone:"{}""#,
+                self.owner, self.repo, milestone.title
+            ),
+            sort: Some("updated".to_owned()),
+            order: Some("asc".to_owned()),
+        };
+        self.github.search_issues(&query)
     }
 
-    /// Get a milestones from the API.
+    /// Get organisation members.
     pub fn get_members(&self) -> Result<Vec<OrganisationMember>, Error> {
-        Ok(self
-            .github(
-                Method::GET,
-                Url::parse(&format!(
-                    "https://api.github.com/orgs/{}/members",
-                    self.owner
-                ))?,
-            )?
-            .send_github()?)
+        self.github.get_members(self.owner)
     }
 }
 
@@ -524,38 +429,3 @@ mod error {
     }
 }
 pub use error::Error;
-
-#[cfg(test)]
-mod tests {
-    use pretty_assertions::assert_eq;
-
-    use super::*;
-
-    #[test]
-    fn invalid_github_token() {
-        assert!(Client::new("foo", "bar", "github_token", "zenhub_token").is_ok());
-        match Client::new("foo", "bar", "invalid header char -> \n", "zenhub_token").unwrap_err() {
-            Error::Config { description } => assert_eq!(
-                description,
-                "Invalid Github token for Authorization header."
-            ),
-            _ => panic!("Unexpected error"),
-        }
-    }
-
-    #[test]
-    fn client_equality_by_args() {
-        assert_eq!(
-            Client::new("foo", "bar", "github_token", "zenhub_token").unwrap(),
-            Client::new("foo", "bar", "github_token", "zenhub_token").unwrap(),
-        );
-        assert_ne!(
-            Client::new("foo", "bar", "github_token", "zenhub_token").unwrap(),
-            Client::new("foo", "other", "github_token", "zenhub_token").unwrap(),
-        );
-        assert_ne!(
-            Client::new("foo", "bar", "github_token", "zenhub_token").unwrap(),
-            Client::new("foo", "bar", "github_token", "other").unwrap(),
-        );
-    }
-}

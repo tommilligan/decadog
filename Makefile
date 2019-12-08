@@ -5,6 +5,6 @@ dev:
 
 test:
 	cargo fmt --all -- --check
-	cargo clippy --all --all-targets --all-features
+	cargo clippy --all --all-targets --all-features -- -D warnings
 	cargo test --all --locked
 	cargo test --all --no-default-features --locked

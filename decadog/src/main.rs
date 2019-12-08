@@ -1,5 +1,4 @@
 #![deny(clippy::all)]
-
 use clap::App;
 use config;
 use decadog_core::secret::Secret;
@@ -20,6 +19,7 @@ pub struct Settings {
     version: Option<u32>,
     owner: String,
     repo: String,
+    github_url: String,
     github_token: Secret,
     zenhub_token: Option<Secret>,
 }
@@ -29,6 +29,7 @@ impl Settings {
         debug!("Loading settings");
 
         let mut settings = config::Config::default();
+        settings.set_default("github_url", "https://api.github.com/")?;
         settings.merge(config::File::with_name("decadog").required(false))?;
         settings.merge(config::Environment::with_prefix("DECADOG"))?;
 
