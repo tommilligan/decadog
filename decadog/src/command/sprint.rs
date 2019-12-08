@@ -3,10 +3,11 @@ use colored::Colorize;
 use decadog_core::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
-use dialoguer::{Confirmation, Input, Select};
+use dialoguer::Confirmation;
+use indexmap::IndexMap;
 use log::error;
 
-use crate::interact::FuzzySelect;
+use crate::interact::{FuzzySelect, Input, Select};
 use crate::{error::Error, Settings};
 
 struct MilestoneManager<'a> {
@@ -161,19 +162,16 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
         return Ok(());
     }
 
-    let selection = Select::new()
-        .with_prompt("Sprint to start")
-        .default(0)
-        .items(
-            &milestones
-                .iter()
-                .map(|milestone| &milestone.title)
-                .collect::<Vec<&String>>(),
-        )
-        .interact()?;
+    let select_milestone = Select::new(
+        "Sprint to start",
+        milestones
+            .iter()
+            .map(|milestone| (&milestone.title, milestone)),
+    )
+    .expect("At least one milestone is required.");
+    let open_milestone = select_milestone.interact()?;
 
-    let milestone = &milestones[selection];
-    let milestone_manager = MilestoneManager::new(&client, milestone)?;
+    let milestone_manager = MilestoneManager::new(&client, open_milestone)?;
     milestone_manager.manage()
 }
 
@@ -203,6 +201,12 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     )?;
 
     let estimates: [u32; 7] = [0, 1, 2, 3, 5, 8, 13];
+    let estimates_lookup: IndexMap<String, u32> = estimates
+        .into_iter()
+        .map(|estimate| (estimate.to_string(), *estimate))
+        .collect();
+    let select_estimate = Select::new("Estimate", estimates_lookup.iter())
+        .expect("At least one estimate is required.");
 
     // Select milestone to close
     let milestones = client.get_milestones()?;
@@ -211,18 +215,15 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         return Ok(());
     }
 
-    let selection = Select::new()
-        .with_prompt("Sprint to finish")
-        .default(0)
-        .items(
-            &milestones
-                .iter()
-                .map(|milestone| &milestone.title)
-                .collect::<Vec<&String>>(),
-        )
-        .interact()?;
+    let select_milestone = Select::new(
+        "Sprint to finish",
+        milestones
+            .iter()
+            .map(|milestone| (&milestone.title, milestone)),
+    )
+    .expect("At least one milestone is required.");
+    let open_milestone = select_milestone.interact()?;
 
-    let open_milestone = &milestones[selection];
     let repository = client.get_repository()?;
     let sprint = client.get_sprint(&repository, &open_milestone)?;
 
@@ -256,19 +257,8 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
         if zenhub_issue.estimate.is_none() {
-            let selection = Select::new()
-                .with_prompt("Estimate")
-                .default(0)
-                .items(
-                    &estimates
-                        .iter()
-                        .map(|estimate| estimate.to_string())
-                        .collect::<Vec<String>>(),
-                )
-                .interact()?;
-
-            let estimate = estimates[selection];
-            client.set_estimate(&repository, &issue, estimate)?;
+            let estimate = select_estimate.interact()?;
+            client.set_estimate(&repository, &issue, *estimate)?;
         }
     }
 
