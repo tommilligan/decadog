@@ -1,8 +1,4 @@
-use std::fmt;
-
-use chrono::{DateTime, FixedOffset};
-use serde_derive::{Deserialize, Serialize};
-
+use crate::github::{Issue, Milestone, OrganisationMember};
 use crate::zenhub::{Pipeline, StartDate};
 
 /// Represents objects in the Github ontology that can be assigned to one another.
@@ -12,69 +8,11 @@ pub trait AssignedTo<T> {
     fn assigned_to(&self, assignable: &T) -> bool;
 }
 
-/// A Github Milestone.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct Milestone {
-    pub id: u32,
-    pub number: u32,
-    pub title: String,
-    pub state: String,
-    pub due_on: DateTime<FixedOffset>,
-}
-
 /// A sprint.
 #[derive(Debug, Clone)]
 pub struct Sprint<'a> {
     pub milestone: &'a Milestone,
     pub start_date: StartDate,
-}
-
-/// A memeber reference in an Organisation.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct OrganisationMember {
-    pub login: String,
-    pub id: u32,
-}
-
-/// A Github User.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct User {
-    pub login: String,
-    pub id: u32,
-    pub name: String,
-}
-
-/// A Github Issue.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct Issue {
-    pub id: u32,
-    pub number: u32,
-    pub state: String,
-    pub title: String,
-    pub milestone: Option<Milestone>,
-    pub assignees: Vec<OrganisationMember>,
-    pub created_at: DateTime<FixedOffset>,
-    pub updated_at: DateTime<FixedOffset>,
-    pub closed_at: Option<DateTime<FixedOffset>>,
-}
-
-/// A Github Repository.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct Repository {
-    pub id: u64,
-    pub name: String,
-}
-
-impl fmt::Display for Milestone {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.title, self.state)
-    }
-}
-
-impl fmt::Display for Issue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.number, self.title)
-    }
 }
 
 impl AssignedTo<Milestone> for Issue {
@@ -108,7 +46,7 @@ impl AssignedTo<Issue> for OrganisationMember {
 
 #[cfg(test)]
 mod tests {
-    use chrono::NaiveDateTime;
+    use chrono::{DateTime, FixedOffset, NaiveDateTime};
     use lazy_static::lazy_static;
 
     use super::*;

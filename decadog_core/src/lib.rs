@@ -12,9 +12,9 @@ pub mod github;
 pub mod secret;
 pub mod zenhub;
 
-pub use crate::core::{AssignedTo, Issue, Milestone, OrganisationMember, Repository, Sprint};
+pub use crate::core::{AssignedTo, Sprint};
 pub use error::Error;
-use github::{IssueUpdate, SearchIssues};
+use github::{Issue, IssueUpdate, Milestone, OrganisationMember, Repository, SearchIssues};
 use zenhub::{Board, Pipeline, PipelinePosition, StartDate};
 
 /// Decadog client, used to abstract complex tasks over the Github API.

@@ -2,13 +2,13 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
 
+use chrono::{DateTime, FixedOffset};
 use log::{debug, error};
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::core::{Issue, Milestone, OrganisationMember, Repository};
 use crate::error::Error;
 
 pub struct Client {
@@ -209,6 +209,64 @@ pub struct SearchIssues {
     pub sort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<String>,
+}
+
+/// A Github Milestone.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Milestone {
+    pub id: u32,
+    pub number: u32,
+    pub title: String,
+    pub state: String,
+    pub due_on: DateTime<FixedOffset>,
+}
+
+/// A memeber reference in an Organisation.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct OrganisationMember {
+    pub login: String,
+    pub id: u32,
+}
+
+/// A Github User.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct User {
+    pub login: String,
+    pub id: u32,
+    pub name: String,
+}
+
+/// A Github Issue.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Issue {
+    pub id: u32,
+    pub number: u32,
+    pub state: String,
+    pub title: String,
+    pub milestone: Option<Milestone>,
+    pub assignees: Vec<OrganisationMember>,
+    pub created_at: DateTime<FixedOffset>,
+    pub updated_at: DateTime<FixedOffset>,
+    pub closed_at: Option<DateTime<FixedOffset>>,
+}
+
+/// A Github Repository.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct Repository {
+    pub id: u64,
+    pub name: String,
+}
+
+impl fmt::Display for Milestone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.title, self.state)
+    }
+}
+
+impl fmt::Display for Issue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.number, self.title)
+    }
 }
 
 /// A response from the Github search API.

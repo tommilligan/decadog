@@ -1,8 +1,8 @@
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
-use decadog_core::github;
+use decadog_core::github::{self, Milestone, OrganisationMember, Repository};
 use decadog_core::zenhub::{self, Pipeline};
-use decadog_core::{AssignedTo, Client, Milestone, OrganisationMember, Repository};
+use decadog_core::{AssignedTo, Client};
 use indexmap::IndexMap;
 use log::error;
 
