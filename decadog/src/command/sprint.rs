@@ -3,46 +3,19 @@ use colored::Colorize;
 use decadog_core::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
-use dialoguer::{Confirmation, Input, Select};
 use indexmap::IndexMap;
 use log::error;
-use scout;
 
+use crate::interact::{Confirmation, FuzzySelect, Input, Select};
 use crate::{error::Error, Settings};
-
-/// A read-only `HashMap`, keyed by human readable description.
-struct ScoutOptions<V> {
-    lookup: IndexMap<String, V>,
-}
-
-impl<V> ScoutOptions<V> {
-    pub fn new(lookup: IndexMap<String, V>) -> Self {
-        Self { lookup }
-    }
-
-    fn get(&self, key: &str) -> Option<&V> {
-        self.lookup.get(key)
-    }
-
-    fn keys(&self) -> Vec<&str> {
-        self.lookup.keys().map(|key| &**key).collect()
-    }
-
-    fn interact(&self) -> Result<&V, Error> {
-        let chosen_key = scout::start(self.keys(), vec![])?;
-        self.get(&chosen_key).ok_or(Error::User {
-            description: format!("Unknown pipeline choice '{}'", chosen_key),
-        })
-    }
-}
 
 struct MilestoneManager<'a> {
     client: &'a Client<'a>,
     milestone: &'a Milestone,
 
     repository: Repository,
-    pipeline_options: ScoutOptions<Pipeline>,
-    member_options: ScoutOptions<OrganisationMember>,
+    pipeline_options: FuzzySelect<Pipeline>,
+    member_options: FuzzySelect<OrganisationMember>,
 }
 
 enum LoopStatus {
@@ -54,21 +27,19 @@ enum LoopStatus {
 impl<'a> MilestoneManager<'a> {
     fn new(client: &'a Client<'a>, milestone: &'a Milestone) -> Result<Self, Error> {
         let organisation_members = client.get_members()?;
-        let members_by_login = organisation_members
+        let member_options: FuzzySelect<OrganisationMember> = organisation_members
             .into_iter()
             .map(|member| (member.login.clone(), member))
             .collect();
-        let member_options = ScoutOptions::new(members_by_login);
 
         let repository = client.get_repository()?;
 
         let board = client.get_board(&repository)?;
-        let pipelines_by_name = board
+        let pipeline_options: FuzzySelect<Pipeline> = board
             .pipelines
             .into_iter()
             .map(|pipeline| (pipeline.name.clone(), pipeline))
             .collect();
-        let pipeline_options = ScoutOptions::new(pipelines_by_name);
 
         Ok(Self {
             client,
@@ -114,10 +85,7 @@ impl<'a> MilestoneManager<'a> {
             eprintln!("Already in milestone.");
         } else {
             // Otherwise, confirm the assignment
-            if Confirmation::new()
-                .with_text("Assign to milestone?")
-                .interact()?
-            {
+            if Confirmation::new("Assign to milestone?").interact()? {
                 self.client
                     .assign_issue_to_milestone(&issue, &self.milestone)?;
             } else {
@@ -139,22 +107,19 @@ impl<'a> MilestoneManager<'a> {
 
         let update_assignment = if issue.assignees.is_empty() {
             // If we do not have an assignee, default to updating assignment
-            !Confirmation::new()
-                .with_text("Leave unassigned?")
-                .interact()?
+            !Confirmation::new("Leave unassigned?").interact()?
         } else {
             // If we already have assignee(s), default to existing value
-            !Confirmation::new()
-                .with_text(&format!(
-                    "Assigned to {}; is this correct?",
-                    issue
-                        .assignees
-                        .iter()
-                        .map(|member| member.login.clone())
-                        .collect::<Vec<String>>()
-                        .join(", ")
-                ))
-                .interact()?
+            !Confirmation::new(&format!(
+                "Assigned to {}; is this correct?",
+                issue
+                    .assignees
+                    .iter()
+                    .map(|member| member.login.clone())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            ))
+            .interact()?
         };
 
         if update_assignment {
@@ -190,19 +155,16 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
         return Ok(());
     }
 
-    let selection = Select::new()
-        .with_prompt("Sprint to start")
-        .default(0)
-        .items(
-            &milestones
-                .iter()
-                .map(|milestone| &milestone.title)
-                .collect::<Vec<&String>>(),
-        )
-        .interact()?;
+    let select_milestone = Select::new(
+        "Sprint to start",
+        milestones
+            .iter()
+            .map(|milestone| (&milestone.title, milestone)),
+    )
+    .expect("At least one milestone is required.");
+    let open_milestone = select_milestone.interact()?;
 
-    let milestone = &milestones[selection];
-    let milestone_manager = MilestoneManager::new(&client, milestone)?;
+    let milestone_manager = MilestoneManager::new(&client, open_milestone)?;
     milestone_manager.manage()
 }
 
@@ -232,6 +194,12 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     )?;
 
     let estimates: [u32; 7] = [0, 1, 2, 3, 5, 8, 13];
+    let estimates_lookup: IndexMap<String, u32> = estimates
+        .iter()
+        .map(|estimate| (estimate.to_string(), *estimate))
+        .collect();
+    let select_estimate = Select::new("Estimate", estimates_lookup.iter())
+        .expect("At least one estimate is required.");
 
     // Select milestone to close
     let milestones = client.get_milestones()?;
@@ -240,18 +208,15 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         return Ok(());
     }
 
-    let selection = Select::new()
-        .with_prompt("Sprint to finish")
-        .default(0)
-        .items(
-            &milestones
-                .iter()
-                .map(|milestone| &milestone.title)
-                .collect::<Vec<&String>>(),
-        )
-        .interact()?;
+    let select_milestone = Select::new(
+        "Sprint to finish",
+        milestones
+            .iter()
+            .map(|milestone| (&milestone.title, milestone)),
+    )
+    .expect("At least one milestone is required.");
+    let open_milestone = select_milestone.interact()?;
 
-    let open_milestone = &milestones[selection];
     let repository = client.get_repository()?;
     let sprint = client.get_sprint(&repository, &open_milestone)?;
 
@@ -273,10 +238,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         // If no milestone, ask to assign to open milestone
         // If answer is no, ignore this issue
         if issue.milestone.is_none() {
-            if Confirmation::new()
-                .with_text("Assign to milestone?")
-                .interact()?
-            {
+            if Confirmation::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, &open_milestone)?;
             } else {
                 continue;
@@ -285,19 +247,8 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
         if zenhub_issue.estimate.is_none() {
-            let selection = Select::new()
-                .with_prompt("Estimate")
-                .default(0)
-                .items(
-                    &estimates
-                        .iter()
-                        .map(|estimate| estimate.to_string())
-                        .collect::<Vec<String>>(),
-                )
-                .interact()?;
-
-            let estimate = estimates[selection];
-            client.set_estimate(&repository, &issue, estimate)?;
+            let estimate = select_estimate.interact()?;
+            client.set_estimate(&repository, &issue, *estimate)?;
         }
     }
 
@@ -307,7 +258,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         println!("{}", issue);
     }
 
-    if Confirmation::new().with_text("Close sprint?").interact()? {
+    if Confirmation::new("Close sprint?").interact()? {
         error!("Closing sprint not implemented.")
     } else {
         return Ok(());

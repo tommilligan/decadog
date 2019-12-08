@@ -8,9 +8,11 @@ use keyring::Keyring;
 use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
 
+mod command;
 mod error;
-mod sprint;
+mod interact;
 
+use command::sprint;
 pub use error::Error;
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
