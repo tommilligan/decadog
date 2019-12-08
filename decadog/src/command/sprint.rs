@@ -1,5 +1,6 @@
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
+use decadog_core::github;
 use decadog_core::{
     AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
 };
@@ -66,18 +67,21 @@ impl<'a> MilestoneManager<'a> {
 
     fn manage_issue(&self, pipeline: &Pipeline) -> Result<LoopStatus, Error> {
         // Input an issue number
-        let issue_number = Input::<String>::new()
+        let issue_number_str = Input::<String>::new()
             .with_prompt("Issue number (n: next pipeline, q: quit)")
             .interact()?;
 
-        // Fetch the issue
-        if issue_number == "q" {
+        // Fetch the issue and parse the number
+        if issue_number_str == "q" {
             return Ok(LoopStatus::Quit);
-        } else if issue_number == "n" {
+        } else if issue_number_str == "n" {
             return Ok(LoopStatus::NextPipeline);
         }
+        let issue_number = issue_number_str.parse().map_err(|_| Error::User {
+            description: format!("Invalid issue number {}.", &issue_number_str),
+        })?;
 
-        let issue = self.client.get_issue_by_number(&issue_number)?;
+        let issue = self.client.get_issue(issue_number)?;
         eprintln!("{}", issue);
 
         // If already assigned to the target milestone, no-op
@@ -135,10 +139,10 @@ impl<'a> MilestoneManager<'a> {
 }
 
 fn start_sprint(settings: &Settings) -> Result<(), Error> {
+    let github = github::Client::new(&settings.github_url, &settings.github_token.value())?;
     let client = Client::new(
         &settings.owner,
         &settings.repo,
-        settings.github_token.as_ref(),
         settings
             .zenhub_token
             .as_ref()
@@ -146,6 +150,7 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
                 description: "Zenhub token required to start sprint.".to_owned(),
             })?
             .as_ref(),
+        &github,
     )?;
 
     // Select milestone to move tickets to
@@ -180,10 +185,10 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     // For each non-closed ticket in the sprint
     // - print status, ask if correct
 
+    let github = github::Client::new(&settings.github_url, &settings.github_token.value())?;
     let client = Client::new(
         &settings.owner,
         &settings.repo,
-        settings.github_token.as_ref(),
         settings
             .zenhub_token
             .as_ref()
@@ -191,6 +196,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
                 description: "Zenhub token required to finish sprint.".to_owned(),
             })?
             .as_ref(),
+        &github,
     )?;
 
     let estimates: [u32; 7] = [0, 1, 2, 3, 5, 8, 13];

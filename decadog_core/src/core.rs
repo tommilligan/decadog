@@ -88,13 +88,6 @@ pub struct Sprint<'a> {
     pub start_date: StartDate,
 }
 
-/// A response from the Github search API.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct GithubSearch<T> {
-    pub incomplete_results: bool,
-    pub items: Vec<T>,
-}
-
 /// A memeber reference in an Organisation.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct OrganisationMember {

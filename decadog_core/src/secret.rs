@@ -18,7 +18,7 @@ impl Secret {
         &self.value[..3]
     }
 
-    fn value(&self) -> &str {
+    pub fn value(&self) -> &str {
         &self.value
     }
 }
