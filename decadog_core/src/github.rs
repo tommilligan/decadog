@@ -2,16 +2,15 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
 
+use chrono::{DateTime, FixedOffset};
 use log::{debug, error};
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
-use crate::core::{Issue, Milestone, OrganisationMember, Repository};
 use crate::error::Error;
 
-/// Decadog client, used to abstract complex tasks over the Github API.
 pub struct Client {
     id: u64,
     reqwest_client: ReqwestClient,
@@ -21,7 +20,7 @@ pub struct Client {
 
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Decadog client {}", self.id)
+        write!(f, "Github client {}", self.id)
     }
 }
 
@@ -58,7 +57,7 @@ impl SendGithubExt for RequestBuilder {
         if status.is_success() {
             Ok(response.json()?)
         } else if status.is_client_error() {
-            Err(Error::GithubClient {
+            Err(Error::Github {
                 error: response.json()?,
                 status,
             })
@@ -105,6 +104,10 @@ impl Client {
         })
     }
 
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
     /// Returns a `request::RequestBuilder` authorized to the Github API.
     pub fn request(&self, method: Method, url: Url) -> Result<RequestBuilder, UrlError> {
         debug!("{} {}", method, url.as_str());
@@ -118,19 +121,21 @@ impl Client {
     pub fn get_issue(&self, owner: &str, repo: &str, issue_number: u32) -> Result<Issue, Error> {
         self.request(
             Method::GET,
-            self.base_url
-                .join(owner)?
-                .join(repo)?
-                .join("issues")?
-                .join(&issue_number.to_string())?,
+            self.base_url.join(&format!(
+                "/repos/{}/{}/issues/{}",
+                owner, repo, issue_number
+            ))?,
         )?
         .send_github()
     }
 
     /// Get a repository by owner and repo name.
     pub fn get_repository(&self, owner: &str, repo: &str) -> Result<Repository, Error> {
-        self.request(Method::GET, self.base_url.join(owner)?.join(repo)?)?
-            .send_github()
+        self.request(
+            Method::GET,
+            self.base_url.join(&format!("/repos/{}/{}", owner, repo))?,
+        )?
+        .send_github()
     }
 
     /// Get members by organisation.
@@ -138,9 +143,7 @@ impl Client {
         self.request(
             Method::GET,
             self.base_url
-                .join("orgs")?
-                .join(organisation)?
-                .join("members")?,
+                .join(&format!("orgs/{}/members", organisation))?,
         )?
         .send_github()
     }
@@ -149,7 +152,8 @@ impl Client {
     pub fn get_milestones(&self, owner: &str, repo: &str) -> Result<Vec<Milestone>, Error> {
         self.request(
             Method::GET,
-            self.base_url.join(owner)?.join(repo)?.join("milestones")?,
+            self.base_url
+                .join(&format!("/repos/{}/{}/milestones", owner, repo))?,
         )?
         .send_github()
     }
@@ -164,11 +168,10 @@ impl Client {
     ) -> Result<Issue, Error> {
         self.request(
             Method::PATCH,
-            self.base_url
-                .join(owner)?
-                .join(repo)?
-                .join("issues")?
-                .join(&issue_number.to_string())?,
+            self.base_url.join(&format!(
+                "/repos/{}/{}/issues/{}",
+                owner, repo, issue_number
+            ))?,
         )?
         .json(update)
         .send_github()
@@ -177,7 +180,7 @@ impl Client {
     /// Search issues.
     pub fn search_issues(&self, query: &SearchIssues) -> Result<Vec<Issue>, Error> {
         let builder = self
-            .request(Method::GET, self.base_url.join("search")?.join("issues")?)?
+            .request(Method::GET, self.base_url.join("search/issues")?)?
             .query(&query);
 
         let results: GithubSearchResults<Issue> = builder.send_github()?;
@@ -206,6 +209,64 @@ pub struct SearchIssues {
     pub sort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<String>,
+}
+
+/// A Github Milestone.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Milestone {
+    pub id: u32,
+    pub number: u32,
+    pub title: String,
+    pub state: String,
+    pub due_on: DateTime<FixedOffset>,
+}
+
+/// A memeber reference in an Organisation.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct OrganisationMember {
+    pub login: String,
+    pub id: u32,
+}
+
+/// A Github User.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct User {
+    pub login: String,
+    pub id: u32,
+    pub name: String,
+}
+
+/// A Github Issue.
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct Issue {
+    pub id: u32,
+    pub number: u32,
+    pub state: String,
+    pub title: String,
+    pub milestone: Option<Milestone>,
+    pub assignees: Vec<OrganisationMember>,
+    pub created_at: DateTime<FixedOffset>,
+    pub updated_at: DateTime<FixedOffset>,
+    pub closed_at: Option<DateTime<FixedOffset>>,
+}
+
+/// A Github Repository.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct Repository {
+    pub id: u64,
+    pub name: String,
+}
+
+impl fmt::Display for Milestone {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} ({})", self.title, self.state)
+    }
+}
+
+impl fmt::Display for Issue {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.number, self.title)
+    }
 }
 
 /// A response from the Github search API.

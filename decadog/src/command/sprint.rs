@@ -1,9 +1,8 @@
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
-use decadog_core::github;
-use decadog_core::{
-    AssignedTo, Client, Milestone, OrganisationMember, Pipeline, PipelinePosition, Repository,
-};
+use decadog_core::github::{self, Milestone, OrganisationMember, Repository};
+use decadog_core::zenhub::{self, Pipeline};
+use decadog_core::{AssignedTo, Client};
 use indexmap::IndexMap;
 use log::error;
 
@@ -97,16 +96,11 @@ impl<'a> MilestoneManager<'a> {
             }
         }
 
-        let position = PipelinePosition {
-            pipeline_id: pipeline.id.clone(),
-            position: "top".to_owned(),
-        };
-
         if issue.assigned_to(pipeline) {
             eprintln!("Already in pipeline.");
         } else {
             self.client
-                .move_issue(&self.repository, &issue, &position)?;
+                .move_issue_to_pipeline(&self.repository, &issue, &pipeline)?;
         }
 
         let update_assignment = if issue.assignees.is_empty() {
@@ -140,9 +134,14 @@ impl<'a> MilestoneManager<'a> {
 
 fn start_sprint(settings: &Settings) -> Result<(), Error> {
     let github = github::Client::new(&settings.github_url, &settings.github_token.value())?;
-    let client = Client::new(
-        &settings.owner,
-        &settings.repo,
+    let zenhub = zenhub::Client::new(
+        settings
+            .zenhub_url
+            .as_ref()
+            .ok_or(Error::Settings {
+                description: "Zenhub url required to start sprint.".to_owned(),
+            })?
+            .as_ref(),
         settings
             .zenhub_token
             .as_ref()
@@ -150,8 +149,8 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
                 description: "Zenhub token required to start sprint.".to_owned(),
             })?
             .as_ref(),
-        &github,
     )?;
+    let client = Client::new(&settings.owner, &settings.repo, &github, &zenhub)?;
 
     // Select milestone to move tickets to
     let milestones = client.get_milestones()?;
@@ -186,9 +185,14 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     // - print status, ask if correct
 
     let github = github::Client::new(&settings.github_url, &settings.github_token.value())?;
-    let client = Client::new(
-        &settings.owner,
-        &settings.repo,
+    let zenhub = zenhub::Client::new(
+        settings
+            .zenhub_url
+            .as_ref()
+            .ok_or(Error::Settings {
+                description: "Zenhub url required to finish sprint.".to_owned(),
+            })?
+            .as_ref(),
         settings
             .zenhub_token
             .as_ref()
@@ -196,8 +200,8 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
                 description: "Zenhub token required to finish sprint.".to_owned(),
             })?
             .as_ref(),
-        &github,
     )?;
+    let client = Client::new(&settings.owner, &settings.repo, &github, &zenhub)?;
 
     let estimates: [u32; 7] = [0, 1, 2, 3, 5, 8, 13];
     let estimates_lookup: IndexMap<String, u32> = estimates
