@@ -11,7 +11,6 @@ use serde_derive::{Deserialize, Serialize};
 use crate::core::{Issue, Milestone, OrganisationMember, Repository};
 use crate::error::Error;
 
-/// Decadog client, used to abstract complex tasks over the Github API.
 pub struct Client {
     id: u64,
     reqwest_client: ReqwestClient,
@@ -21,7 +20,7 @@ pub struct Client {
 
 impl fmt::Debug for Client {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Decadog client {}", self.id)
+        write!(f, "Github client {}", self.id)
     }
 }
 
@@ -58,7 +57,7 @@ impl SendGithubExt for RequestBuilder {
         if status.is_success() {
             Ok(response.json()?)
         } else if status.is_client_error() {
-            Err(Error::GithubClient {
+            Err(Error::Github {
                 error: response.json()?,
                 status,
             })
@@ -103,6 +102,10 @@ impl Client {
             headers,
             base_url,
         })
+    }
+
+    pub fn id(&self) -> u64 {
+        self.id
     }
 
     /// Returns a `request::RequestBuilder` authorized to the Github API.

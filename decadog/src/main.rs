@@ -21,6 +21,7 @@ pub struct Settings {
     repo: String,
     github_url: String,
     github_token: Secret,
+    zenhub_url: Option<String>,
     zenhub_token: Option<Secret>,
 }
 
@@ -30,6 +31,7 @@ impl Settings {
 
         let mut settings = config::Config::default();
         settings.set_default("github_url", "https://api.github.com/")?;
+        settings.set_default("zenhub_url", "https://api.zenhub.io/")?;
         settings.merge(config::File::with_name("decadog").required(false))?;
         settings.merge(config::Environment::with_prefix("DECADOG"))?;
 

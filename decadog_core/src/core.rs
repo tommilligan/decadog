@@ -3,66 +3,13 @@ use std::fmt;
 use chrono::{DateTime, FixedOffset};
 use serde_derive::{Deserialize, Serialize};
 
+use crate::zenhub::{Pipeline, StartDate};
+
 /// Represents objects in the Github ontology that can be assigned to one another.
 ///
 /// e.g. `User` assigned to `Issue`, `Issue` assigned to `Milestone`
 pub trait AssignedTo<T> {
     fn assigned_to(&self, assignable: &T) -> bool;
-}
-
-/// A Zenhub estimate.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct Estimate {
-    pub value: u32,
-}
-
-/// Body to set a Zenhub estimate.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct SetEstimate {
-    pub estimate: u32,
-}
-
-impl From<u32> for SetEstimate {
-    fn from(estimate: u32) -> Self {
-        SetEstimate { estimate }
-    }
-}
-
-/// A Zenhub reference to an issue.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct PipelineIssue {
-    pub issue_number: u32,
-    pub estimate: Option<Estimate>,
-    pub is_epic: bool,
-    pub position: u32,
-}
-
-/// Zenhub issue data.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct ZenhubIssue {
-    pub estimate: Option<Estimate>,
-    pub is_epic: bool,
-}
-
-/// A Zenhub pipeline.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct Pipeline {
-    pub id: String,
-    pub name: String,
-    pub issues: Vec<PipelineIssue>,
-}
-
-/// A position of an issue in a Zenhub pipeline.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct PipelinePosition {
-    pub pipeline_id: String,
-    pub position: String,
-}
-
-/// A Zenhub board.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct Board {
-    pub pipelines: Vec<Pipeline>,
 }
 
 /// A Github Milestone.
@@ -73,12 +20,6 @@ pub struct Milestone {
     pub title: String,
     pub state: String,
     pub due_on: DateTime<FixedOffset>,
-}
-
-/// A Zenhub milestone StartDate.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct StartDate {
-    pub start_date: DateTime<FixedOffset>,
 }
 
 /// A sprint.
@@ -120,7 +61,7 @@ pub struct Issue {
 /// A Github Repository.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct Repository {
-    pub id: u32,
+    pub id: u64,
     pub name: String,
 }
 
