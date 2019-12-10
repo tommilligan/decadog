@@ -17,7 +17,7 @@ pub use error::Error;
 use github::{Issue, IssueUpdate, Milestone, OrganisationMember, Repository, SearchIssues};
 use zenhub::{Board, Pipeline, PipelinePosition, StartDate};
 
-/// Decadog client, used to abstract complex tasks over the Github API.
+/// Decadog client, used to abstract complex tasks over several APIs.
 pub struct Client<'a> {
     owner: &'a str,
     repo: &'a str,

@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io;
 use std::iter::FromIterator;
 
@@ -44,15 +45,19 @@ impl<V> FromIterator<(String, V)> for FuzzySelect<V> {
 
 pub struct Select<'a, V> {
     prompt: &'a str,
-    lookup: IndexMap<&'a String, &'a V>,
+    lookup: IndexMap<String, &'a V>,
 }
 
 impl<'a, V> Select<'a, V> {
     pub fn new<I>(prompt: &'a str, iter: I) -> Result<Self, InteractError>
     where
-        I: IntoIterator<Item = (&'a String, &'a V)>,
+        I: IntoIterator<Item = &'a V>,
+        V: Display,
     {
-        let lookup: IndexMap<_, _> = iter.into_iter().collect();
+        let lookup: IndexMap<_, _> = iter
+            .into_iter()
+            .map(|value| (format!("{}", value), value))
+            .collect();
         if lookup.is_empty() {
             return Err(InteractError::Options {
                 description: "Select requires at least 1 option.".to_owned(),
@@ -65,7 +70,7 @@ impl<'a, V> Select<'a, V> {
         let selection_index = dialoguer::Select::new()
             .with_prompt(self.prompt)
             .default(0)
-            .items(&self.lookup.keys().cloned().collect::<Vec<&String>>())
+            .items(&self.lookup.keys().collect::<Vec<&String>>())
             .interact()?;
 
         Ok(self

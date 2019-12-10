@@ -215,6 +215,18 @@ pub struct Estimate {
     pub value: u32,
 }
 
+impl From<&u32> for Estimate {
+    fn from(value: &u32) -> Self {
+        Estimate { value: *value }
+    }
+}
+
+impl fmt::Display for Estimate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value.to_string())
+    }
+}
+
 /// Body to set a Zenhub estimate.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct SetEstimate {
