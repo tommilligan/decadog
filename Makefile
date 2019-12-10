@@ -8,6 +8,7 @@ test:
 	cargo clippy --all --all-targets --all-features -- -D warnings
 	cargo test --all --locked
 	cargo test --all --no-default-features --locked
+	cargo test --all --doc --locked
 
 doc:
-	cargo doc --workspace --no-deps
+	cargo doc --workspace --no-deps --locked

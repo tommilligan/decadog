@@ -1,3 +1,4 @@
+/// Github integration.
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
@@ -24,6 +25,7 @@ impl fmt::Debug for Client {
     }
 }
 
+/// Detail of a single client error.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GithubClientErrorDetail {
     pub resource: String,
@@ -31,6 +33,7 @@ pub struct GithubClientErrorDetail {
     pub code: String,
 }
 
+/// Returned from the API when one or more client errors have been made.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GithubClientErrorBody {
     pub message: String,
