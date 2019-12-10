@@ -1,9 +1,22 @@
+/// Special support for secret values.
 use std::fmt;
 
 use serde::de::{self, Deserialize, Deserializer, Visitor};
 use serde::ser::{Serialize, Serializer};
 
 /// A secret string that should never be shown.
+///
+/// ```
+/// # use decadog_core::secret::Secret;
+/// #
+/// let my_secret: Secret = "secret_value".to_owned().into();
+///
+/// // Secrets prevent accidental information leaks.
+/// assert_eq!(format!("{}", my_secret), "sec***");
+///
+/// // But they can be used easily
+/// assert_eq!(my_secret.as_ref(), "secret_value");
+/// ```
 #[derive(Clone, PartialEq)]
 pub struct Secret {
     value: String,
