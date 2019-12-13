@@ -199,6 +199,24 @@ impl Client {
         }
         Ok(results.items)
     }
+
+    pub fn patch_milestone(
+        &self,
+        owner: &str,
+        repo: &str,
+        milestone_number: u32,
+        update: &MilestoneUpdate,
+    ) -> Result<Milestone, Error> {
+        self.request(
+            Method::PATCH,
+            self.base_url.join(&format!(
+                "/repos/{}/{}/milestones/{}",
+                owner, repo, milestone_number
+            ))?,
+        )?
+        .json(update)
+        .send_github()
+    }
 }
 
 /// Update an issue.
@@ -262,6 +280,13 @@ pub struct Milestone {
     pub title: String,
     pub state: State,
     pub due_on: DateTime<FixedOffset>,
+}
+
+/// Update a milestone.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct MilestoneUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// A memeber reference in an Organisation.
