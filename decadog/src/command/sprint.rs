@@ -95,7 +95,7 @@ impl<'a> MilestoneManager<'a> {
             // Otherwise, confirm the assignment
             if Confirmation::new("Assign to milestone?").interact()? {
                 self.client
-                    .assign_issue_to_milestone(&issue, &self.milestone)?;
+                    .assign_issue_to_milestone(&issue, Some(&self.milestone))?;
             } else {
                 return Ok(LoopStatus::Success);
             }
@@ -239,7 +239,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         // If answer is no, ignore this issue
         if issue.milestone.is_none() {
             if Confirmation::new("Assign to milestone?").interact()? {
-                client.assign_issue_to_milestone(&issue, &open_milestone)?;
+                client.assign_issue_to_milestone(&issue, Some(&open_milestone))?;
             } else {
                 continue;
             }
@@ -254,12 +254,18 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
     println!();
     println!("{}", "Issues open in sprint:".bold());
-    for issue in client.get_milestone_open_issues(&open_milestone)?.iter() {
+    let open_milestone_issues = client.get_milestone_open_issues(&open_milestone)?;
+    for issue in open_milestone_issues.iter() {
         println!("{}", issue);
     }
 
+    println!();
     if Confirmation::new("Close sprint?").interact()? {
-        error!("Closing sprint not implemented.")
+        println!("Removing issues from milestone...");
+        for issue in open_milestone_issues.iter() {
+            client.assign_issue_to_milestone(&issue, None)?;
+        }
+        error!("Closing sprint not fully implemented.");
     } else {
         return Ok(());
     }
