@@ -153,11 +153,17 @@ impl Client {
 
     /// Get milestones by owner and repo name.
     pub fn get_milestones(&self, owner: &str, repo: &str) -> Result<Vec<Milestone>, Error> {
+        let query = GetMilestones {
+            state: None,
+            sort: None,
+            direction: Some("desc".to_owned()),
+        };
         self.request(
             Method::GET,
             self.base_url
                 .join(&format!("/repos/{}/{}/milestones", owner, repo))?,
         )?
+        .query(&query)
         .send_github()
     }
 
@@ -198,10 +204,14 @@ impl Client {
 /// Update an issue.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct IssueUpdate {
+    /// Assign milestone. Use `None` to skip assignment, Some(None) to clear.
+    #[allow(clippy::option_option)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub milestone: Option<u32>,
+    pub milestone: Option<Option<u32>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assignees: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
 }
 
 /// Request to search issues.
@@ -212,6 +222,17 @@ pub struct SearchIssues {
     pub sort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<String>,
+}
+
+/// Request to get milestones.
+#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+pub struct GetMilestones {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub direction: Option<String>,
 }
 
 /// A Github Milestone.

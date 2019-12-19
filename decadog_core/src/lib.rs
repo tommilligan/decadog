@@ -141,16 +141,16 @@ impl<'a> Client<'a> {
         self.github.get_milestones(self.owner, self.repo)
     }
 
-    /// Assign an issue to a milestone.
+    /// Assign an issue to a milestone. Passing `None` will set to no milestone.
     ///
     /// This will overwrite an existing milestone, if present.
     pub fn assign_issue_to_milestone(
         &self,
         issue: &Issue,
-        milestone: &Milestone,
+        milestone: Option<&Milestone>,
     ) -> Result<Issue, Error> {
         let mut update = IssueUpdate::default();
-        update.milestone = Some(milestone.number);
+        update.milestone = Some(milestone.map(|milestone| milestone.number));
 
         self.github
             .patch_issue(&self.owner, &self.repo, issue.number, &update)
