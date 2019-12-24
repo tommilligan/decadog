@@ -328,7 +328,7 @@ mod tests {
     }
 
     #[test]
-    fn test_something() {
+    fn test_get_issue() {
         let client = mock_github_client();
         let body = r#"{ "id": 1234567,
   "number": 1,
@@ -356,8 +356,8 @@ mod tests {
   "updated_at": "2011-04-22T13:33:48Z"
 }"#;
         let mock = mock("GET", "/repos/tommilligan/decadog/issues/1")
+            .match_header("authorization", "token mock_token")
             .with_status(200)
-            .with_header("authorization", "token mock_token")
             .with_body(body)
             .create();
 
