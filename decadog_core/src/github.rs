@@ -236,7 +236,7 @@ pub struct GetMilestones {
 }
 
 /// A Github Milestone.
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Milestone {
     pub id: u32,
     pub number: u32,
@@ -246,7 +246,7 @@ pub struct Milestone {
 }
 
 /// A memeber reference in an Organisation.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
 pub struct OrganisationMember {
     pub login: String,
     pub id: u32,
@@ -261,7 +261,7 @@ pub struct User {
 }
 
 /// A Github Issue.
-#[derive(Deserialize, Serialize, Debug, Clone)]
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Issue {
     pub id: u32,
     pub number: u32,
@@ -302,9 +302,18 @@ pub struct GithubSearchResults<T> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::{FixedOffset, NaiveDate, TimeZone};
+    use mockito::mock;
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    const MOCK_GITHUB_TOKEN: &str = "mock_token";
+
+    fn mock_github_client() -> Client {
+        Client::new(&mockito::server_url(), MOCK_GITHUB_TOKEN)
+            .expect("Couldn't create mock github client")
+    }
 
     #[test]
     fn invalid_github_token() {
@@ -316,5 +325,70 @@ mod tests {
             ),
             _ => panic!("Unexpected error"),
         }
+    }
+
+    #[test]
+    fn test_something() {
+        let client = mock_github_client();
+        let body = r#"{ "id": 1234567,
+  "number": 1,
+  "state": "open",
+  "title": "Mock Title",
+  "body": "Mock description",
+  "user": {
+    "login": "tommilligan",
+    "id": 1
+  },
+  "assignees": [
+    {
+      "login": "tommilligan",
+      "id": 1
+    }
+  ],
+  "milestone": {
+    "id": 1002604,
+    "number": 1,
+    "state": "open",
+    "title": "v1.0",
+    "due_on": "2012-10-09T23:39:01Z"
+  },
+  "created_at": "2011-04-22T13:33:48Z",
+  "updated_at": "2011-04-22T13:33:48Z"
+}"#;
+        let mock = mock("GET", "/repos/tommilligan/decadog/issues/1")
+            .with_status(200)
+            .with_header("authorization", "token mock_token")
+            .with_body(body)
+            .create();
+
+        let issue = client.get_issue("tommilligan", "decadog", 1).unwrap();
+        mock.assert();
+
+        assert_eq!(
+            issue,
+            Issue {
+                id: 1_234_567,
+                number: 1,
+                state: "open".to_owned(),
+                title: "Mock Title".to_owned(),
+                milestone: Some(Milestone {
+                    id: 1_002_604,
+                    number: 1,
+                    title: "v1.0".to_owned(),
+                    state: "open".to_owned(),
+                    due_on: FixedOffset::east(0)
+                        .from_utc_datetime(&NaiveDate::from_ymd(2012, 10, 9).and_hms(23, 39, 1)),
+                }),
+                assignees: vec![OrganisationMember {
+                    login: "tommilligan".to_owned(),
+                    id: 1
+                }],
+                created_at: FixedOffset::east(0)
+                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                updated_at: FixedOffset::east(0)
+                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                closed_at: None,
+            }
+        );
     }
 }
