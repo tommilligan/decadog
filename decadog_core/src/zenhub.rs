@@ -203,14 +203,14 @@ impl Client {
 }
 
 /// Zenhub issue data.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
 pub struct Issue {
     pub estimate: Option<Estimate>,
     pub is_epic: bool,
 }
 
 /// A Zenhub estimate.
-#[derive(Deserialize, Serialize, Debug, Clone, Default)]
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
 pub struct Estimate {
     pub value: u32,
 }
@@ -286,9 +286,17 @@ pub struct StartDate {
 
 #[cfg(test)]
 mod tests {
+    use mockito::mock;
     use pretty_assertions::assert_eq;
 
     use super::*;
+
+    const MOCK_ZENHUB_TOKEN: &str = "mock_token";
+
+    fn mock_zenhub_client() -> Client {
+        Client::new(&mockito::server_url(), MOCK_ZENHUB_TOKEN)
+            .expect("Couldn't create mock zenhub client")
+    }
 
     #[test]
     fn invalid_token() {
@@ -300,5 +308,33 @@ mod tests {
             ),
             _ => panic!("Unexpected error"),
         }
+    }
+
+    #[test]
+    fn test_get_issue() {
+        let client = mock_zenhub_client();
+        let body = r#"{
+    "estimate": {
+        "value": 3
+    },
+    "is_epic": false
+}"#;
+
+        let mock = mock("GET", "/p1/repositories/1234/issues/1")
+            .match_header("x-authentication-token", "mock_token")
+            .with_status(200)
+            .with_body(body)
+            .create();
+
+        let issue = client.get_issue(1234, 1).unwrap();
+        mock.assert();
+
+        assert_eq!(
+            issue,
+            Issue {
+                estimate: Some(Estimate { value: 3 }),
+                is_epic: false,
+            }
+        );
     }
 }
