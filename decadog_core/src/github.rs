@@ -211,7 +211,7 @@ pub struct IssueUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assignees: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<State>,
 }
 
 /// Request to search issues.
@@ -241,7 +241,7 @@ pub struct Milestone {
     pub id: u32,
     pub number: u32,
     pub title: String,
-    pub state: String,
+    pub state: State,
     pub due_on: DateTime<FixedOffset>,
 }
 
@@ -260,12 +260,26 @@ pub struct User {
     pub name: String,
 }
 
+/// A Github status.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum State {
+    Open,
+    Closed,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::Open
+    }
+}
+
 /// A Github Issue.
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 pub struct Issue {
     pub id: u32,
     pub number: u32,
-    pub state: String,
+    pub state: State,
     pub title: String,
     pub milestone: Option<Milestone>,
     pub assignees: Vec<OrganisationMember>,
@@ -283,7 +297,7 @@ pub struct Repository {
 
 impl fmt::Display for Milestone {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} ({})", self.title, self.state)
+        write!(f, "{}", self.title)
     }
 }
 
@@ -330,15 +344,12 @@ mod tests {
     #[test]
     fn test_get_issue() {
         let client = mock_github_client();
-        let body = r#"{ "id": 1234567,
+        let body = r#"{
+  "id": 1234567,
   "number": 1,
   "state": "open",
   "title": "Mock Title",
   "body": "Mock description",
-  "user": {
-    "login": "tommilligan",
-    "id": 1
-  },
   "assignees": [
     {
       "login": "tommilligan",
@@ -369,13 +380,13 @@ mod tests {
             Issue {
                 id: 1_234_567,
                 number: 1,
-                state: "open".to_owned(),
+                state: State::Open,
                 title: "Mock Title".to_owned(),
                 milestone: Some(Milestone {
                     id: 1_002_604,
                     number: 1,
                     title: "v1.0".to_owned(),
-                    state: "open".to_owned(),
+                    state: State::Open,
                     due_on: FixedOffset::east(0)
                         .from_utc_datetime(&NaiveDate::from_ymd(2012, 10, 9).and_hms(23, 39, 1)),
                 }),
@@ -383,6 +394,52 @@ mod tests {
                     login: "tommilligan".to_owned(),
                     id: 1
                 }],
+                created_at: FixedOffset::east(0)
+                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                updated_at: FixedOffset::east(0)
+                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                closed_at: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_close_issue() {
+        let client = mock_github_client();
+        let body = r#"{
+  "id": 1234567,
+  "number": 1,
+  "state": "closed",
+  "title": "Mock Title",
+  "body": "Mock description",
+  "assignees": [],
+  "milestone": null,
+  "created_at": "2011-04-22T13:33:48Z",
+  "updated_at": "2011-04-22T13:33:48Z"
+}"#;
+        let mock = mock("PATCH", "/repos/tommilligan/decadog/issues/1")
+            .match_header("authorization", "token mock_token")
+            .match_body(r#"{"state":"closed"}"#)
+            .with_status(200)
+            .with_body(body)
+            .create();
+
+        let mut update = IssueUpdate::default();
+        update.state = Some(State::Closed);
+        let issue = client
+            .patch_issue("tommilligan", "decadog", 1, &update)
+            .unwrap();
+        mock.assert();
+
+        assert_eq!(
+            issue,
+            Issue {
+                id: 1_234_567,
+                number: 1,
+                state: State::Closed,
+                title: "Mock Title".to_owned(),
+                milestone: None,
+                assignees: vec![],
                 created_at: FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
                 updated_at: FixedOffset::east(0)
