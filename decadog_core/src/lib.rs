@@ -209,3 +209,75 @@ impl<'a> Client<'a> {
         self.github.get_members(self.owner)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::{FixedOffset, NaiveDate, TimeZone};
+    use lazy_static::lazy_static;
+    use mockito::mock;
+    use pretty_assertions::assert_eq;
+
+    use super::github::{tests::MOCK_GITHUB_CLIENT, State};
+    use super::zenhub::tests::MOCK_ZENHUB_CLIENT;
+    use super::*;
+
+    const OWNER: &str = "tommilligan";
+    const REPO: &str = "decadog";
+    lazy_static! {
+        pub static ref MOCK_CLIENT: Client<'static> =
+            Client::new(OWNER, REPO, &MOCK_GITHUB_CLIENT, &MOCK_ZENHUB_CLIENT)
+                .expect("Couldn't create mock client");
+    }
+
+    #[test]
+    fn test_get_issues_closed_after() {
+        let body = r#"{
+  "incomplete_results": false,
+  "items": []
+}"#;
+        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aclosed+closed%3A%3E%3D2011-04-22&sort=updated&order=asc")
+            .match_header("authorization", "token mock_token")
+            .with_status(200)
+            .with_body(body)
+            .create();
+
+        let issues = MOCK_CLIENT
+            .get_issues_closed_after(
+                &FixedOffset::east(0)
+                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+            )
+            .unwrap();
+
+        mock.assert();
+
+        assert_eq!(issues, vec![]);
+    }
+
+    #[test]
+    fn test_get_milestone_open_issues() {
+        let body = r#"{
+  "incomplete_results": false,
+  "items": []
+}"#;
+        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aopen+milestone%3A%22Sprint+2%22&sort=updated&order=asc")
+            .match_header("authorization", "token mock_token")
+            .with_status(200)
+            .with_body(body)
+            .create();
+
+        let issues = MOCK_CLIENT
+            .get_milestone_open_issues(&Milestone {
+                id: 12345,
+                number: 12,
+                title: "Sprint 2".to_owned(),
+                state: State::Open,
+                due_on: FixedOffset::east(0)
+                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+            })
+            .unwrap();
+
+        mock.assert();
+
+        assert_eq!(issues, vec![]);
+    }
+}

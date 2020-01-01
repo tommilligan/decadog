@@ -334,18 +334,19 @@ pub struct GithubSearchResults<T> {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use chrono::{FixedOffset, NaiveDate, TimeZone};
+    use lazy_static::lazy_static;
     use mockito::mock;
     use pretty_assertions::assert_eq;
 
     use super::*;
 
     const MOCK_GITHUB_TOKEN: &str = "mock_token";
-
-    fn mock_github_client() -> Client {
-        Client::new(&mockito::server_url(), MOCK_GITHUB_TOKEN)
-            .expect("Couldn't create mock github client")
+    lazy_static! {
+        pub static ref MOCK_GITHUB_CLIENT: Client =
+            Client::new(&mockito::server_url(), MOCK_GITHUB_TOKEN)
+                .expect("Couldn't create mock github client");
     }
 
     #[test]
@@ -362,7 +363,6 @@ mod tests {
 
     #[test]
     fn test_get_issue() {
-        let client = mock_github_client();
         let body = r#"{
   "id": 1234567,
   "number": 1,
@@ -391,7 +391,9 @@ mod tests {
             .with_body(body)
             .create();
 
-        let issue = client.get_issue("tommilligan", "decadog", 1).unwrap();
+        let issue = MOCK_GITHUB_CLIENT
+            .get_issue("tommilligan", "decadog", 1)
+            .unwrap();
         mock.assert();
 
         assert_eq!(
@@ -424,7 +426,6 @@ mod tests {
 
     #[test]
     fn test_close_issue() {
-        let client = mock_github_client();
         let body = r#"{
   "id": 1234567,
   "number": 1,
@@ -445,7 +446,7 @@ mod tests {
 
         let mut update = IssueUpdate::default();
         update.state = Some(State::Closed);
-        let issue = client
+        let issue = MOCK_GITHUB_CLIENT
             .patch_issue("tommilligan", "decadog", 1, &update)
             .unwrap();
         mock.assert();

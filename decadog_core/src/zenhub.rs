@@ -285,17 +285,18 @@ pub struct StartDate {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
+    use lazy_static::lazy_static;
     use mockito::mock;
     use pretty_assertions::assert_eq;
 
     use super::*;
 
     const MOCK_ZENHUB_TOKEN: &str = "mock_token";
-
-    fn mock_zenhub_client() -> Client {
-        Client::new(&mockito::server_url(), MOCK_ZENHUB_TOKEN)
-            .expect("Couldn't create mock zenhub client")
+    lazy_static! {
+        pub static ref MOCK_ZENHUB_CLIENT: Client =
+            Client::new(&mockito::server_url(), MOCK_ZENHUB_TOKEN)
+                .expect("Couldn't create mock zenhub client");
     }
 
     #[test]
@@ -312,7 +313,6 @@ mod tests {
 
     #[test]
     fn test_get_issue() {
-        let client = mock_zenhub_client();
         let body = r#"{
     "estimate": {
         "value": 3
@@ -326,7 +326,7 @@ mod tests {
             .with_body(body)
             .create();
 
-        let issue = client.get_issue(1234, 1).unwrap();
+        let issue = MOCK_ZENHUB_CLIENT.get_issue(1234, 1).unwrap();
         mock.assert();
 
         assert_eq!(
