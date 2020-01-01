@@ -156,7 +156,7 @@ impl Client {
         let query = GetMilestones {
             state: None,
             sort: None,
-            direction: Some("desc".to_owned()),
+            direction: Some(Direction::Descending),
         };
         self.request(
             Method::GET,
@@ -214,25 +214,44 @@ pub struct IssueUpdate {
     pub state: Option<State>,
 }
 
+/// A search filter for state.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum SearchState {
+    Open,
+    Closed,
+    All,
+}
+
+/// Direction in which to return results.
+#[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
+pub enum Direction {
+    #[serde(rename = "asc")]
+    Ascending,
+    #[serde(rename = "desc")]
+    Descending,
+}
+
 /// Request to search issues.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct SearchIssues {
     pub q: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort: Option<String>,
+    /// Ignored unless `sort` is provided.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub order: Option<String>,
+    pub order: Option<Direction>,
 }
 
 /// Request to get milestones.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct GetMilestones {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
+    pub state: Option<SearchState>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sort: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub direction: Option<String>,
+    pub direction: Option<Direction>,
 }
 
 /// A Github Milestone.

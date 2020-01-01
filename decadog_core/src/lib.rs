@@ -14,7 +14,9 @@ pub mod zenhub;
 
 pub use crate::core::{AssignedTo, Sprint};
 pub use error::Error;
-use github::{Issue, IssueUpdate, Milestone, OrganisationMember, Repository, SearchIssues};
+use github::{
+    Direction, Issue, IssueUpdate, Milestone, OrganisationMember, Repository, SearchIssues,
+};
 use zenhub::{Board, Pipeline, PipelinePosition, StartDate};
 
 /// Decadog client, used to abstract complex tasks over several APIs.
@@ -184,7 +186,7 @@ impl<'a> Client<'a> {
                 datetime.format("%Y-%m-%d")
             ),
             sort: Some("updated".to_owned()),
-            order: Some("asc".to_owned()),
+            order: Some(Direction::Ascending),
         };
         self.github.search_issues(&query)
     }
@@ -197,7 +199,7 @@ impl<'a> Client<'a> {
                 self.owner, self.repo, milestone.title
             ),
             sort: Some("updated".to_owned()),
-            order: Some("asc".to_owned()),
+            order: Some(Direction::Ascending),
         };
         self.github.search_issues(&query)
     }
