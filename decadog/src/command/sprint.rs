@@ -29,6 +29,12 @@ enum LoopStatus {
     NextPipeline,
 }
 
+#[derive(PartialEq)]
+enum Planning {
+    Planned,
+    Unplanned,
+}
+
 impl<'a> MilestoneManager<'a> {
     fn new(client: &'a Client<'a>, milestone: &'a Milestone) -> Result<Self, Error> {
         let organisation_members = client.get_members()?;
@@ -220,6 +226,9 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     let repository = client.get_repository()?;
     let sprint = client.get_sprint(&repository, &open_milestone)?;
 
+    let mut points_done_in_sprint: u32 = 0;
+    let mut points_done_out_of_sprint: u32 = 0;
+
     println!();
     println!("{}", "Issues closed in the sprint timeframe:".bold());
     for issue in client
@@ -233,22 +242,33 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
             };
         };
 
-        println!("{}", &issue);
-
-        // If no milestone, ask to assign to open milestone
+        // This variable keeps track of whether an issue was planned or not. Issues are considered
+        // planned if they belong to the current milestone at time of closing the sprint. If an
+        // issue is added to the milestone at the end of the sprint, then it is considered as out
+        // of sprint.
+        let mut issue_planning = Planning::Planned;
+        // If no milestone, ask to assign to open milestone and if applicable mark as not planned
         // If answer is no, ignore this issue
         if issue.milestone.is_none() {
             if Confirmation::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, Some(&open_milestone))?;
+                issue_planning = Planning::Unplanned;
             } else {
                 continue;
             }
         };
 
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
-        if zenhub_issue.estimate.is_none() {
-            let estimate = select_estimate.interact()?;
-            client.set_estimate(&repository, &issue, estimate.value)?;
+        let estimate_value = if let Some(existing_estimate) = zenhub_issue.estimate {
+            existing_estimate.value
+        } else {
+            let new_estimate = select_estimate.interact()?;
+            client.set_estimate(&repository, &issue, new_estimate.value)?;
+            new_estimate.value
+        };
+        match issue_planning {
+            Planning::Planned => points_done_in_sprint += estimate_value,
+            Planning::Unplanned => points_done_out_of_sprint += estimate_value,
         }
     }
 
@@ -260,6 +280,25 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     }
 
     println!();
+    // Update title with number of planned and completed points this sprint
+    // Prompt user for number of planned points in the sprint
+    let planned_points_str = Input::<String>::new()
+        .with_prompt("Points planned this sprint (q: quit)")
+        .interact()?;
+    if planned_points_str == "q" {
+        return Ok(());
+    }
+    let planned_points: u32 = planned_points_str.parse().map_err(|_| Error::User {
+        description: format!("Invalid number of planned points {}.", &planned_points_str),
+    })?;
+    // New title: Sprint <milestone_number> [<points done in sprint>/<points planned> + <points
+    // done out of sprint>]
+    let new_title = format!(
+        "{} [{}/{} + {}]",
+        open_milestone.title, points_done_in_sprint, planned_points, points_done_out_of_sprint
+    );
+    client.update_milestone_title(open_milestone, new_title)?;
+
     if Confirmation::new("Close sprint?").interact()? {
         println!("Removing issues from milestone...");
         for issue in open_milestone_issues.iter() {

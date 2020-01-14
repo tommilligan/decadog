@@ -15,7 +15,8 @@ pub mod zenhub;
 pub use crate::core::{AssignedTo, Sprint};
 pub use error::Error;
 use github::{
-    Direction, Issue, IssueUpdate, Milestone, OrganisationMember, Repository, SearchIssues,
+    Direction, Issue, IssueUpdate, Milestone, MilestoneUpdate, OrganisationMember, Repository,
+    SearchIssues,
 };
 use zenhub::{Board, Pipeline, PipelinePosition, StartDate};
 
@@ -191,6 +192,19 @@ impl<'a> Client<'a> {
         self.github.search_issues(&query)
     }
 
+    /// Get issues in a given milestone.
+    pub fn get_milestone_issues(&self, milestone: &Milestone) -> Result<Vec<Issue>, Error> {
+        let query = SearchIssues {
+            q: format!(
+                r#"repo:{}/{} type:issue milestone:"{}""#,
+                self.owner, self.repo, milestone.title
+            ),
+            sort: Some("updated".to_owned()),
+            order: Some(Direction::Ascending),
+        };
+        self.github.search_issues(&query)
+    }
+
     /// Get issues open in a given milestone.
     pub fn get_milestone_open_issues(&self, milestone: &Milestone) -> Result<Vec<Issue>, Error> {
         let query = SearchIssues {
@@ -207,6 +221,18 @@ impl<'a> Client<'a> {
     /// Get organisation members.
     pub fn get_members(&self) -> Result<Vec<OrganisationMember>, Error> {
         self.github.get_members(self.owner)
+    }
+    /// Update milestone title with provided title
+    pub fn update_milestone_title(
+        &self,
+        milestone: &Milestone,
+        new_title: String,
+    ) -> Result<Milestone, Error> {
+        let update = MilestoneUpdate {
+            title: Some(new_title),
+        };
+        self.github
+            .patch_milestone(&self.owner, &self.repo, milestone.number, &update)
     }
 }
 

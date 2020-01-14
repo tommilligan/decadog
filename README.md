@@ -41,13 +41,20 @@ export DECADOG_GITHUB_TOKEN=abcdef...
 
 #### OS Keyring (secrets only)
 
-You will need to compile with `config_keyring` for this to work.
+You will need to compile with `config_keyring` for this to work. You may need to
+install `libdbus-1-dev`.
 
 ```bash
 cargo build --release --bins --features config_keyring
 ```
 
 On Linux, you can set the appropriate secrets by running:
+
+First, install `secret-tool`:
+
+```bash
+apt-get install libsecret-tools
+```
 
 ```bash
 secret-tool store --label='decadog_github_token' application rust-keyring service decadog_github_token username decadog
