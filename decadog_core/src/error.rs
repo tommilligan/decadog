@@ -26,6 +26,9 @@ pub enum Error {
 
     #[snafu(display("Url parse error: {}", source))]
     Url { source: UrlError },
+
+    #[snafu(display("Unknown error: {}", description))]
+    Unknown { description: String },
 }
 
 impl From<ReqwestError> for Error {

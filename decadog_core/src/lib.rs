@@ -15,8 +15,8 @@ pub mod zenhub;
 pub use crate::core::{AssignedTo, Sprint};
 pub use error::Error;
 use github::{
-    Direction, Issue, IssueUpdate, Milestone, MilestoneUpdate, OrganisationMember, Repository,
-    SearchIssues,
+    paginate::PaginatedSearch, Direction, Issue, IssueUpdate, Milestone, MilestoneUpdate,
+    OrganisationMember, Repository, SearchIssues,
 };
 use zenhub::{Board, Pipeline, PipelinePosition, StartDate};
 
@@ -178,7 +178,7 @@ impl<'a> Client<'a> {
     pub fn get_issues_closed_after(
         &self,
         datetime: &DateTime<FixedOffset>,
-    ) -> Result<Vec<Issue>, Error> {
+    ) -> Result<PaginatedSearch<Issue>, Error> {
         let query = SearchIssues {
             q: format!(
                 "repo:{}/{} type:issue state:closed closed:>={}",
@@ -194,7 +194,10 @@ impl<'a> Client<'a> {
     }
 
     /// Get issues in a given milestone.
-    pub fn get_milestone_issues(&self, milestone: &Milestone) -> Result<Vec<Issue>, Error> {
+    pub fn get_milestone_issues(
+        &self,
+        milestone: &Milestone,
+    ) -> Result<PaginatedSearch<Issue>, Error> {
         let query = SearchIssues {
             q: format!(
                 r#"repo:{}/{} type:issue milestone:"{}""#,
@@ -208,7 +211,10 @@ impl<'a> Client<'a> {
     }
 
     /// Get issues open in a given milestone.
-    pub fn get_milestone_open_issues(&self, milestone: &Milestone) -> Result<Vec<Issue>, Error> {
+    pub fn get_milestone_open_issues(
+        &self,
+        milestone: &Milestone,
+    ) -> Result<PaginatedSearch<Issue>, Error> {
         let query = SearchIssues {
             q: format!(
                 r#"repo:{}/{} type:issue state:open milestone:"{}""#,
@@ -275,6 +281,8 @@ mod tests {
                 &FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
             )
+            .unwrap()
+            .collect::<Result<Vec<Issue>, _>>()
             .unwrap();
 
         mock.assert();
@@ -303,6 +311,8 @@ mod tests {
                 due_on: FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
             })
+            .unwrap()
+            .collect::<Result<Vec<Issue>, _>>()
             .unwrap();
 
         mock.assert();

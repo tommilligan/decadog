@@ -224,8 +224,12 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     println!("{}", "Issues closed in the sprint timeframe:".bold());
     for issue in client
         .get_issues_closed_after(&sprint.start_date.start_date)?
-        .iter()
+        .into_iter()
     {
+        // TODO(tommilligan) I feel like there's a better way to iterate over
+        // Result<T, E>, and early return at the first error value
+        let issue = issue?;
+
         // If assigned to a different milestone, ignore
         if let Some(milestone) = &issue.milestone {
             if milestone.id != open_milestone.id {
@@ -258,7 +262,9 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
     println!();
     println!("{}", "Issues open in sprint:".bold());
-    let open_milestone_issues = client.get_milestone_open_issues(&open_milestone)?;
+    let open_milestone_issues = client
+        .get_milestone_open_issues(&open_milestone)?
+        .collect::<Result<Vec<_>, _>>()?;
     for issue in open_milestone_issues.iter() {
         println!("{}", issue);
     }
@@ -278,7 +284,8 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
     let mut points_in_milestone: u32 = 0;
     let mut points_in_milestone_open: u32 = 0;
-    for issue in client.get_milestone_issues(&open_milestone)?.iter() {
+    for issue_result in client.get_milestone_issues(&open_milestone)?.into_iter() {
+        let issue = issue_result.unwrap();
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
         let issue_estimate = match zenhub_issue.estimate {
             Some(estimate) => estimate.value,
