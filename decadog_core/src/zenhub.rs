@@ -5,7 +5,7 @@ use std::hash::Hasher;
 use chrono::{DateTime, FixedOffset};
 use log::debug;
 use reqwest::header::HeaderMap;
-use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
+use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
@@ -119,12 +119,11 @@ impl Client {
     }
 
     /// Returns a `request::RequestBuilder` authorized to the Zenhub API.
-    pub fn request(&self, method: Method, url: Url) -> Result<RequestBuilder, UrlError> {
+    pub fn request(&self, method: Method, url: Url) -> RequestBuilder {
         debug!("{} {}", method, url.as_str());
-        Ok(self
-            .reqwest_client
+        self.reqwest_client
             .request(method, url)
-            .headers(self.headers.clone()))
+            .headers(self.headers.clone())
     }
 
     /// Get Zenhub board for a repository.
@@ -133,7 +132,7 @@ impl Client {
             Method::GET,
             self.base_url
                 .join(&format!("/p1/repositories/{}/board", repository_id))?,
-        )?
+        )
         .send_api()
     }
 
@@ -149,7 +148,7 @@ impl Client {
                 "/p1/repositories/{}/milestones/{}/start_date",
                 repository_id, milestone_number
             ))?,
-        )?
+        )
         .send_api()
     }
 
@@ -161,7 +160,7 @@ impl Client {
                 "/p1/repositories/{}/issues/{}",
                 repository_id, issue_number
             ))?,
-        )?
+        )
         .send_api()
     }
 
@@ -178,7 +177,7 @@ impl Client {
                 "/p1/repositories/{}/issues/{}/estimate",
                 repository_id, issue_number
             ))?,
-        )?
+        )
         .json(&SetEstimate::from(estimate))
         .send_api_no_response()
     }
@@ -196,7 +195,7 @@ impl Client {
                 "/p1/repositories/{}/issues/{}/moves",
                 repository_id, issue_number
             ))?,
-        )?
+        )
         .json(position)
         .send_api_no_response()
     }
