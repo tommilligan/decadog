@@ -188,6 +188,7 @@ impl<'a> Client<'a> {
             ),
             sort: Some("updated".to_owned()),
             order: Some(Direction::Ascending),
+            per_page: Some(100),
         };
         self.github.search_issues(&query)
     }
@@ -201,6 +202,7 @@ impl<'a> Client<'a> {
             ),
             sort: Some("updated".to_owned()),
             order: Some(Direction::Ascending),
+            per_page: Some(100),
         };
         self.github.search_issues(&query)
     }
@@ -214,6 +216,7 @@ impl<'a> Client<'a> {
             ),
             sort: Some("updated".to_owned()),
             order: Some(Direction::Ascending),
+            per_page: Some(100),
         };
         self.github.search_issues(&query)
     }
@@ -261,7 +264,7 @@ mod tests {
   "incomplete_results": false,
   "items": []
 }"#;
-        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aclosed+closed%3A%3E%3D2011-04-22&sort=updated&order=asc")
+        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aclosed+closed%3A%3E%3D2011-04-22&sort=updated&order=asc&per_page=100")
             .match_header("authorization", "token mock_token")
             .with_status(200)
             .with_body(body)
@@ -285,7 +288,7 @@ mod tests {
   "incomplete_results": false,
   "items": []
 }"#;
-        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aopen+milestone%3A%22Sprint+2%22&sort=updated&order=asc")
+        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aopen+milestone%3A%22Sprint+2%22&sort=updated&order=asc&per_page=100")
             .match_header("authorization", "token mock_token")
             .with_status(200)
             .with_body(body)
