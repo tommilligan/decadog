@@ -259,6 +259,8 @@ pub struct SearchIssues {
     /// Ignored unless `sort` is provided.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<Direction>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_page: Option<u32>,
 }
 
 /// Request to get milestones.

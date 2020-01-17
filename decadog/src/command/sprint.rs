@@ -1,6 +1,6 @@
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
-use decadog_core::github::{self, Milestone, OrganisationMember, Repository};
+use decadog_core::github::{self, Milestone, OrganisationMember, Repository, State};
 use decadog_core::zenhub::{self, Estimate, Pipeline};
 use decadog_core::{AssignedTo, Client};
 use lazy_static::lazy_static;
@@ -27,12 +27,6 @@ enum LoopStatus {
     Success,
     Quit,
     NextPipeline,
-}
-
-#[derive(PartialEq)]
-enum Planning {
-    Planned,
-    Unplanned,
 }
 
 impl<'a> MilestoneManager<'a> {
@@ -226,9 +220,6 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     let repository = client.get_repository()?;
     let sprint = client.get_sprint(&repository, &open_milestone)?;
 
-    let mut points_done_in_sprint: u32 = 0;
-    let mut points_done_out_of_sprint: u32 = 0;
-
     println!();
     println!("{}", "Issues closed in the sprint timeframe:".bold());
     for issue in client
@@ -242,34 +233,27 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
             };
         };
 
+        println!("{}", &issue);
+
         // This variable keeps track of whether an issue was planned or not. Issues are considered
         // planned if they belong to the current milestone at time of closing the sprint. If an
         // issue is added to the milestone at the end of the sprint, then it is considered as out
         // of sprint.
-        let mut issue_planning = Planning::Planned;
         // If no milestone, ask to assign to open milestone and if applicable mark as not planned
         // If answer is no, ignore this issue
         if issue.milestone.is_none() {
             if Confirmation::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, Some(&open_milestone))?;
-                issue_planning = Planning::Unplanned;
             } else {
                 continue;
             }
         };
 
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
-        let estimate_value = if let Some(existing_estimate) = zenhub_issue.estimate {
-            existing_estimate.value
-        } else {
+        if zenhub_issue.estimate == None {
             let new_estimate = select_estimate.interact()?;
             client.set_estimate(&repository, &issue, new_estimate.value)?;
-            new_estimate.value
         };
-        match issue_planning {
-            Planning::Planned => points_done_in_sprint += estimate_value,
-            Planning::Unplanned => points_done_out_of_sprint += estimate_value,
-        }
     }
 
     println!();
@@ -291,6 +275,49 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     let planned_points: u32 = planned_points_str.parse().map_err(|_| Error::User {
         description: format!("Invalid number of planned points {}.", &planned_points_str),
     })?;
+
+    let mut points_in_milestone: u32 = 0;
+    let mut points_in_milestone_open: u32 = 0;
+    for issue in client.get_milestone_issues(&open_milestone)?.iter() {
+        let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
+        let issue_estimate = match zenhub_issue.estimate {
+            Some(estimate) => estimate.value,
+            None => 0,
+        };
+        if issue.state == State::Open {
+            points_in_milestone_open += issue_estimate;
+        };
+        points_in_milestone += issue_estimate;
+    }
+
+    let points_done_in_sprint = planned_points
+        .checked_sub(points_in_milestone_open)
+        .ok_or_else(|| Error::User {
+            description:
+                "Planned points too low: should be higher than points remaining in sprint."
+                    .to_owned(),
+        })?;
+    let points_done_out_of_sprint =
+        points_in_milestone
+            .checked_sub(planned_points)
+            .ok_or_else(|| Error::User {
+                description:
+                    "Planned points too high: should be lower than all points in milestone."
+                        .to_owned(),
+            })?;
+    eprintln!(
+        r#"Planned: {}
+Done in sprint: {}
+Done out of sprint: {}
+Total done: {}
+Planned but not done: {}"#,
+        planned_points,
+        points_done_in_sprint,
+        points_done_out_of_sprint,
+        points_in_milestone,
+        points_in_milestone_open,
+    );
+
     // New title: Sprint <milestone_number> [<points done in sprint>/<points planned> + <points
     // done out of sprint>]
     let new_title = format!(
