@@ -6,7 +6,7 @@ use std::hash::Hasher;
 use chrono::{DateTime, FixedOffset};
 use log::{debug, error};
 use reqwest::header::{HeaderMap, AUTHORIZATION};
-use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url, UrlError};
+use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
@@ -112,12 +112,11 @@ impl Client {
     }
 
     /// Returns a `request::RequestBuilder` authorized to the Github API.
-    pub fn request(&self, method: Method, url: Url) -> Result<RequestBuilder, UrlError> {
+    pub fn request(&self, method: Method, url: Url) -> RequestBuilder {
         debug!("{} {}", method, url.as_str());
-        Ok(self
-            .reqwest_client
+        self.reqwest_client
             .request(method, url)
-            .headers(self.headers.clone()))
+            .headers(self.headers.clone())
     }
 
     /// Get an issue by owner, repo name and issue number.
@@ -128,7 +127,7 @@ impl Client {
                 "/repos/{}/{}/issues/{}",
                 owner, repo, issue_number
             ))?,
-        )?
+        )
         .send_github()
     }
 
@@ -137,7 +136,7 @@ impl Client {
         self.request(
             Method::GET,
             self.base_url.join(&format!("/repos/{}/{}", owner, repo))?,
-        )?
+        )
         .send_github()
     }
 
@@ -147,7 +146,7 @@ impl Client {
             Method::GET,
             self.base_url
                 .join(&format!("orgs/{}/members", organisation))?,
-        )?
+        )
         .send_github()
     }
 
@@ -162,7 +161,7 @@ impl Client {
             Method::GET,
             self.base_url
                 .join(&format!("/repos/{}/{}/milestones", owner, repo))?,
-        )?
+        )
         .query(&query)
         .send_github()
     }
@@ -181,7 +180,7 @@ impl Client {
                 "/repos/{}/{}/issues/{}",
                 owner, repo, issue_number
             ))?,
-        )?
+        )
         .json(update)
         .send_github()
     }
@@ -189,7 +188,7 @@ impl Client {
     /// Search issues.
     pub fn search_issues(&self, query: &SearchIssues) -> Result<Vec<Issue>, Error> {
         let builder = self
-            .request(Method::GET, self.base_url.join("search/issues")?)?
+            .request(Method::GET, self.base_url.join("search/issues")?)
             .query(&query);
 
         let results: GithubSearchResults<Issue> = builder.send_github()?;
@@ -213,7 +212,7 @@ impl Client {
                 "/repos/{}/{}/milestones/{}",
                 owner, repo, milestone_number
             ))?,
-        )?
+        )
         .json(update)
         .send_github()
     }
