@@ -103,3 +103,7 @@ It will:
   - [ ] Make errors shown to users nicer
     - [ ] Make config errors clearer
   - [ ] Manage exit codes
+
+## Zenhub API
+
+- Bulk estimate fetching appears to be from https://api.zenhub.com/v5/repositories/22101589/issues/zenhub-data?pipelines=1&estimates=1&priorities=1&workspaceId=558a778c97dc18a27282a708

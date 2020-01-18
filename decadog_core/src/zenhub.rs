@@ -1,12 +1,14 @@
 use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
+use std::ops::Not;
 
 use chrono::{DateTime, FixedOffset};
 use log::debug;
 use reqwest::header::HeaderMap;
 use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url};
 use serde::de::DeserializeOwned;
+use serde::ser::Serializer;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::error::Error;
@@ -193,13 +195,43 @@ impl Client {
     }
 
     /// Get Zenhub issue metadata.
-    pub fn get_issue(&self, repository_id: u64, issue_number: u32) -> Result<Issue, Error> {
+    pub fn get_issue(&self, repository_id: u64, issue_number: u32) -> Result<IssueEstimate, Error> {
         self.request(
             Method::GET,
             self.base_url.join(&format!(
                 "/p1/repositories/{}/issues/{}",
                 repository_id, issue_number
             ))?,
+        )
+        .send_api()
+    }
+
+    /// Get Zenhub data for a list of issues.
+    pub fn get_issues(
+        &self,
+        repository_id: u64,
+        workspace_id: &str,
+        issue_numbers: &[u32],
+    ) -> Result<Vec<IssueData>, Error> {
+        let mut issue_data_query = IssueDataQuery::default();
+        issue_data_query.workspace_id = workspace_id;
+        issue_data_query.estimates = true;
+        issue_data_query.pipelines = true;
+        issue_data_query.epics = true;
+
+        self.request(
+            Method::POST,
+            self.base_url.join(&format!(
+                "/v5/repositories/{}/issues/zenhub-data",
+                repository_id
+            ))?,
+        )
+        .query(&issue_data_query)
+        .form(
+            &issue_numbers
+                .iter()
+                .map(|issue_number| ("issue_numbers[]", issue_number))
+                .collect::<Vec<(&str, &u32)>>(),
         )
         .send_api()
     }
@@ -251,11 +283,46 @@ pub struct Workspace {
     pub repositories: Vec<u64>,
 }
 
-/// Zenhub issue data.
+/// Zenhub issue estimate data, returned for a single issue.
 #[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
-pub struct Issue {
+pub struct IssueEstimate {
     pub estimate: Option<Estimate>,
     pub is_epic: bool,
+}
+
+/// Zenhub issue data, returned for multiple issues.
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
+pub struct IssueData {
+    pub issue_number: u32,
+    pub estimate: Option<u32>,
+    pub is_epic: bool,
+    pub pipeline: IssueDataPipeline,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
+pub struct IssueDataPipeline {
+    pub name: String,
+}
+
+/// Zenhub issue data, returned for multiple issues.
+///
+/// Bools are ints in this request. Hooray.
+#[derive(Serialize, Debug, Clone, Default, PartialEq)]
+pub struct IssueDataQuery<'a> {
+    #[serde(rename = "workspaceId")]
+    pub workspace_id: &'a str,
+    #[serde(serialize_with = "serialize_bool_as_int")]
+    #[serde(skip_serializing_if = "Not::not")]
+    pub epics: bool,
+    #[serde(serialize_with = "serialize_bool_as_int")]
+    #[serde(skip_serializing_if = "Not::not")]
+    pub estimates: bool,
+    #[serde(serialize_with = "serialize_bool_as_int")]
+    #[serde(skip_serializing_if = "Not::not")]
+    pub pipelines: bool,
+    #[serde(serialize_with = "serialize_bool_as_int")]
+    #[serde(skip_serializing_if = "Not::not")]
+    pub priorities: bool,
 }
 
 /// A Zenhub estimate.
@@ -340,6 +407,13 @@ impl From<DateTime<FixedOffset>> for StartDate {
     }
 }
 
+fn serialize_bool_as_int<S>(value: &bool, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    serializer.serialize_i8(*value as i8)
+}
+
 #[cfg(test)]
 pub mod tests {
     use lazy_static::lazy_static;
@@ -387,10 +461,66 @@ pub mod tests {
 
         assert_eq!(
             issue,
-            Issue {
+            IssueEstimate {
                 estimate: Some(Estimate { value: 3 }),
                 is_epic: false,
             }
+        );
+    }
+
+    #[test]
+    fn test_get_issues() {
+        let body = r#"[
+  {
+    "issue_number": 0,
+    "estimate": 3,
+    "is_epic": false,
+    "pipeline": { "name": "Done" }
+  },
+  {
+    "issue_number": 3,
+    "estimate": null,
+    "is_epic": true,
+    "pipeline": { "name": "In Progress" }
+  }
+]"#;
+
+        let mock = mock(
+            "GET",
+            "/v5/repositories/1234/issues/zenhub-data?workspaceId=workspace0&epics=1&estimates=1&pipelines=1",
+        )
+        .match_header("x-authentication-token", "mock_token")
+        .match_header("content-type", "application/x-www-form-urlencoded")
+        .match_body("issue_numbers%5B%5D=0&issue_numbers%5B%5D=2")
+        .with_status(200)
+        .with_body(body)
+        .create();
+
+        let issues = MOCK_ZENHUB_CLIENT
+            .get_issues(1234, "workspace0", &[0, 2])
+            .unwrap();
+        mock.assert();
+
+        assert_eq!(
+            issues,
+            vec![
+                IssueData {
+                    issue_number: 0,
+                    estimate: Some(3),
+                    is_epic: false,
+                    pipeline: IssueDataPipeline {
+                        name: "Done".to_owned()
+                    }
+                },
+                IssueData {
+                    issue_number: 3,
+                    estimate: None,
+                    is_epic: true,
+                    pipeline: IssueDataPipeline {
+                        name: "In Progress".to_owned()
+                    }
+                }
+            ]
         );
     }
 }

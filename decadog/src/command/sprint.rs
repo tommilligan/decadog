@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::{self, Display};
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
@@ -329,6 +330,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     let open_milestone = select_milestone.interact()?.to_owned();
 
     let repository = client.get_repository()?;
+    let workspace = client.get_first_workspace(&repository)?;
     let sprint = client.get_sprint(&repository, open_milestone)?;
 
     println!();
@@ -400,15 +402,26 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     })?;
 
     println!("Calucating points summary...");
+    let milestone_issues: Vec<github::Issue> = client
+        .get_milestone_issues(&sprint.milestone)?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    let zenhub_issue_data: HashMap<u32, zenhub::IssueData> = client
+        .get_zenhub_issues(&repository, &workspace, &milestone_issues)?
+        .into_iter()
+        .map(|issue_data| (issue_data.issue_number, issue_data))
+        .collect();
+
     let mut points_in_milestone: u32 = 0;
     let mut points_in_milestone_open: u32 = 0;
-    for issue_result in client.get_milestone_issues(&sprint.milestone)?.into_iter() {
-        let issue = issue_result.unwrap();
-        let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
-        let issue_estimate = match zenhub_issue.estimate {
-            Some(estimate) => estimate.value,
-            None => 0,
-        };
+    for issue in milestone_issues {
+        let issue_estimate = zenhub_issue_data
+            .get(&issue.number)
+            .ok_or_else(|| decadog_core::Error::Unknown {
+                description: format!("No zenhub data for issue {}", issue.number),
+            })?
+            .estimate
+            .unwrap_or(0);
         if issue.state == State::Open {
             points_in_milestone_open += issue_estimate;
         };

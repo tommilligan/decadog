@@ -96,8 +96,20 @@ impl<'a> Client<'a> {
         &self,
         repository: &Repository,
         issue: &Issue,
-    ) -> Result<zenhub::Issue, Error> {
+    ) -> Result<zenhub::IssueEstimate, Error> {
         self.zenhub.get_issue(repository.id, issue.number)
+    }
+
+    /// Get Zenhub issue metadata.
+    pub fn get_zenhub_issues(
+        &self,
+        repository: &Repository,
+        workspace: &Workspace,
+        issues: &[Issue],
+    ) -> Result<Vec<zenhub::IssueData>, Error> {
+        let issue_numbers: Vec<u32> = issues.iter().map(|issue| issue.number).collect();
+        self.zenhub
+            .get_issues(repository.id, &workspace.id, &issue_numbers)
     }
 
     /// Set Zenhub issue estimate.
