@@ -4,13 +4,18 @@ use std::fmt;
 use std::hash::Hasher;
 
 use chrono::{DateTime, FixedOffset};
-use log::{debug, error};
+use log::debug;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url};
-use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::error::Error;
+
+pub mod paginate;
+pub mod request;
+
+use paginate::PaginatedSearch;
+use request::RequestBuilderExt;
 
 pub struct Client {
     id: u64,
@@ -39,38 +44,6 @@ pub struct GithubClientErrorBody {
     pub message: String,
     pub errors: Option<Vec<GithubClientErrorDetail>>,
     pub documentation_url: Option<String>,
-}
-
-/// Send a HTTP request to Github, and return the resulting struct.
-trait SendGithubExt {
-    fn send_github<T>(self) -> Result<T, Error>
-    where
-        Self: Sized,
-        T: DeserializeOwned;
-}
-
-impl SendGithubExt for RequestBuilder {
-    fn send_github<T>(self) -> Result<T, Error>
-    where
-        Self: Sized,
-        T: DeserializeOwned,
-    {
-        let mut response = self.send()?;
-        let status = response.status();
-        if status.is_success() {
-            Ok(response.json()?)
-        } else if status.is_client_error() {
-            Err(Error::Github {
-                error: response.json()?,
-                status,
-            })
-        } else {
-            Err(Error::Api {
-                description: "Unexpected response status code.".to_owned(),
-                status,
-            })
-        }
-    }
 }
 
 impl Client {
@@ -186,17 +159,13 @@ impl Client {
     }
 
     /// Search issues.
-    pub fn search_issues(&self, query: &SearchIssues) -> Result<Vec<Issue>, Error> {
+    pub fn search_issues(&self, query: &SearchIssues) -> Result<PaginatedSearch<Issue>, Error> {
         let builder = self
             .request(Method::GET, self.base_url.join("search/issues")?)
             .query(&query);
+        let request = builder.build()?;
 
-        let results: GithubSearchResults<Issue> = builder.send_github()?;
-        if results.incomplete_results {
-            // FIXME handle github pagination
-            error!("Incomplete results recieved from Github Search API, this is bad");
-        }
-        Ok(results.items)
+        PaginatedSearch::<Issue>::new(&self.reqwest_client, request)
     }
 
     pub fn patch_milestone(
@@ -350,13 +319,6 @@ impl fmt::Display for Issue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.number, self.title)
     }
-}
-
-/// A response from the Github search API.
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct GithubSearchResults<T> {
-    pub incomplete_results: bool,
-    pub items: Vec<T>,
 }
 
 #[cfg(test)]
