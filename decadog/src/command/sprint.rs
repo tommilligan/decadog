@@ -334,11 +334,12 @@ Planned but not done: {}"#,
     client.update_milestone_title(open_milestone, new_title)?;
 
     if Confirmation::new("Close sprint?").interact()? {
-        println!("Removing issues from milestone...");
+        println!("Closing milestone.");
+        client.close_milestone(&open_milestone)?;
+        println!("Removing open issues from milestone...");
         for issue in open_milestone_issues.iter() {
             client.assign_issue_to_milestone(&issue, None)?;
         }
-        error!("Closing sprint not fully implemented.");
     } else {
         return Ok(());
     }

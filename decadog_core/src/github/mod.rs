@@ -257,6 +257,12 @@ pub struct Milestone {
 pub struct MilestoneUpdate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<State>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub due_on: Option<DateTime<FixedOffset>>,
 }
 
 /// A memeber reference in an Organisation.
@@ -453,6 +459,42 @@ pub mod tests {
                 updated_at: FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
                 closed_at: None,
+            }
+        );
+    }
+
+    #[test]
+    fn test_close_milestone() {
+        let body = r#"{
+  "id": 1234567,
+  "number": 1,
+  "state": "closed",
+  "title": "Mock Title",
+  "due_on": "2011-04-22T13:33:48Z"
+}"#;
+        let mock = mock("PATCH", "/repos/tommilligan/decadog/milestones/1")
+            .match_header("authorization", "token mock_token")
+            .match_body(r#"{"state":"closed"}"#)
+            .with_status(200)
+            .with_body(body)
+            .create();
+
+        let mut update = MilestoneUpdate::default();
+        update.state = Some(State::Closed);
+        let milestone = MOCK_GITHUB_CLIENT
+            .patch_milestone("tommilligan", "decadog", 1, &update)
+            .unwrap();
+        mock.assert();
+
+        assert_eq!(
+            milestone,
+            Milestone {
+                id: 1_234_567,
+                number: 1,
+                state: State::Closed,
+                title: "Mock Title".to_owned(),
+                due_on: FixedOffset::east(0)
+                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
             }
         );
     }
