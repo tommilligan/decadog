@@ -16,7 +16,7 @@ pub use crate::core::{AssignedTo, Sprint};
 pub use error::Error;
 use github::{
     paginate::PaginatedSearch, Direction, Issue, IssueUpdate, Milestone, MilestoneUpdate,
-    OrganisationMember, Repository, SearchIssues,
+    OrganisationMember, Repository, SearchIssues, State,
 };
 use zenhub::{Board, Pipeline, PipelinePosition, StartDate};
 
@@ -231,15 +231,23 @@ impl<'a> Client<'a> {
     pub fn get_members(&self) -> Result<Vec<OrganisationMember>, Error> {
         self.github.get_members(self.owner)
     }
+
     /// Update milestone title with provided title
     pub fn update_milestone_title(
         &self,
         milestone: &Milestone,
         new_title: String,
     ) -> Result<Milestone, Error> {
-        let update = MilestoneUpdate {
-            title: Some(new_title),
-        };
+        let mut update = MilestoneUpdate::default();
+        update.title = Some(new_title);
+        self.github
+            .patch_milestone(&self.owner, &self.repo, milestone.number, &update)
+    }
+
+    /// Close milestone.
+    pub fn close_milestone(&self, milestone: &Milestone) -> Result<Milestone, Error> {
+        let mut update = MilestoneUpdate::default();
+        update.state = Some(State::Closed);
         self.github
             .patch_milestone(&self.owner, &self.repo, milestone.number, &update)
     }
