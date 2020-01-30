@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
 use decadog_core::github::{self, Milestone, OrganisationMember, Repository, State};
@@ -12,6 +14,67 @@ use crate::{error::Error, Settings};
 lazy_static! {
     static ref ESTIMATES: Vec<Estimate> =
         [0u32, 1, 2, 3, 5, 8, 13].iter().map(Into::into).collect();
+}
+
+struct SprintPoints {
+    planned: u32,
+    in_milestone: u32,
+    in_milestone_open: u32,
+
+    done_in_sprint: u32,
+    done_out_of_sprint: u32,
+    done_total: u32,
+}
+
+impl SprintPoints {
+    pub fn new(planned: u32, in_milestone: u32, in_milestone_open: u32) -> Result<Self, Error> {
+        let done_in_sprint = planned
+            .checked_sub(in_milestone_open)
+            .ok_or_else(|| Error::User {
+                description:
+                    "Planned points too low: should be higher than points remaining in sprint."
+                        .to_owned(),
+            })?;
+        let done_out_of_sprint = in_milestone
+            .checked_sub(planned)
+            .ok_or_else(|| Error::User {
+                description:
+                    "Planned points too high: should be lower than all points in milestone."
+                        .to_owned(),
+            })?;
+        let done_total = done_in_sprint + done_out_of_sprint;
+
+        Ok(Self {
+            planned,
+            in_milestone,
+            in_milestone_open,
+
+            done_in_sprint,
+            done_out_of_sprint,
+            done_total,
+        })
+    }
+}
+
+impl Display for SprintPoints {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            r#"Total done: {}
+    Done in sprint: {}
+    Done out of sprint: {}
+
+    Planned: {}
+    Planned but not done: {}
+    Total in milestone: {}"#,
+            self.done_total,
+            self.done_in_sprint,
+            self.done_out_of_sprint,
+            self.planned,
+            self.in_milestone_open,
+            self.in_milestone,
+        )
+    }
 }
 
 struct MilestoneManager<'a> {
@@ -246,6 +309,12 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         // If no milestone, ask to assign to open milestone and if applicable mark as not planned
         // If answer is no, ignore this issue
         if issue.milestone.is_none() {
+            println!(
+                "https://github.com/{}/{}/issues/{}",
+                &client.owner(),
+                &client.repo(),
+                &issue.number
+            );
             if Confirmation::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, Some(&open_milestone))?;
             } else {
@@ -282,6 +351,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         description: format!("Invalid number of planned points {}.", &planned_points_str),
     })?;
 
+    println!("Calucating points summary...");
     let mut points_in_milestone: u32 = 0;
     let mut points_in_milestone_open: u32 = 0;
     for issue_result in client.get_milestone_issues(&open_milestone)?.into_iter() {
@@ -297,43 +367,27 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         points_in_milestone += issue_estimate;
     }
 
-    let points_done_in_sprint = planned_points
-        .checked_sub(points_in_milestone_open)
-        .ok_or_else(|| Error::User {
-            description:
-                "Planned points too low: should be higher than points remaining in sprint."
-                    .to_owned(),
-        })?;
-    let points_done_out_of_sprint =
-        points_in_milestone
-            .checked_sub(planned_points)
-            .ok_or_else(|| Error::User {
-                description:
-                    "Planned points too high: should be lower than all points in milestone."
-                        .to_owned(),
-            })?;
-    eprintln!(
-        r#"Planned: {}
-Done in sprint: {}
-Done out of sprint: {}
-Total done: {}
-Planned but not done: {}"#,
+    let sprint_points = SprintPoints::new(
         planned_points,
-        points_done_in_sprint,
-        points_done_out_of_sprint,
         points_in_milestone,
         points_in_milestone_open,
-    );
+    )?;
 
-    // New title: Sprint <milestone_number> [<points done in sprint>/<points planned> + <points
-    // done out of sprint>]
-    let new_title = format!(
-        "{} [{}/{} + {}]",
-        open_milestone.title, points_done_in_sprint, planned_points, points_done_out_of_sprint
-    );
-    client.update_milestone_title(open_milestone, new_title)?;
+    eprintln!("{}", &sprint_points);
+    eprintln!();
 
     if Confirmation::new("Close sprint?").interact()? {
+        // New title: Sprint <milestone_number> [<points done in sprint>/<points planned> + <points
+        // done out of sprint>]
+        let new_title = format!(
+            "{} [{}/{} + {}]",
+            open_milestone.title,
+            sprint_points.done_in_sprint,
+            sprint_points.planned,
+            sprint_points.done_out_of_sprint
+        );
+        client.update_milestone_title(open_milestone, new_title)?;
+
         println!("Closing milestone.");
         client.close_milestone(&open_milestone)?;
         println!("Removing open issues from milestone...");
