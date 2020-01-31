@@ -147,11 +147,13 @@ impl Client {
     }
 
     /// Get Zenhub board for a repository.
-    pub fn get_board(&self, repository_id: u64) -> Result<Board, Error> {
+    pub fn get_board(&self, repository_id: u64, workspace_id: &str) -> Result<Board, Error> {
         self.request(
             Method::GET,
-            self.base_url
-                .join(&format!("/p1/repositories/{}/board", repository_id))?,
+            self.base_url.join(&format!(
+                "/p2/workspaces/{}/repositories/{}/board",
+                workspace_id, repository_id
+            ))?,
         )
         .send_api()
     }
@@ -224,14 +226,15 @@ impl Client {
     pub fn move_issue(
         &self,
         repository_id: u64,
+        workspace_id: &str,
         issue_number: u32,
         position: &PipelinePosition,
     ) -> Result<(), Error> {
         self.request(
             Method::POST,
             self.base_url.join(&format!(
-                "/p1/repositories/{}/issues/{}/moves",
-                repository_id, issue_number
+                "/p2/workspaces/{}/repositories/{}/issues/{}/moves",
+                workspace_id, repository_id, issue_number
             ))?,
         )
         .json(position)
@@ -291,7 +294,6 @@ pub struct PipelineIssue {
     pub issue_number: u32,
     pub estimate: Option<Estimate>,
     pub is_epic: bool,
-    pub position: u32,
 }
 
 /// A Zenhub pipeline.
