@@ -126,6 +126,26 @@ impl Client {
             .headers(self.headers.clone())
     }
 
+    /// Get the first Zenhub workspace for a repository.
+    pub fn get_first_workspace(&self, repository_id: u64) -> Result<Workspace, Error> {
+        self.get_workspaces(repository_id)?
+            .into_iter()
+            .nth(0)
+            .ok_or_else(|| Error::Unknown {
+                description: "No Zenhub workspace found for repository.".to_owned(),
+            })
+    }
+
+    /// Get Zenhub workspaces for a repository.
+    pub fn get_workspaces(&self, repository_id: u64) -> Result<Vec<Workspace>, Error> {
+        self.request(
+            Method::GET,
+            self.base_url
+                .join(&format!("/p2/repositories/{}/workspaces", repository_id))?,
+        )
+        .send_api()
+    }
+
     /// Get Zenhub board for a repository.
     pub fn get_board(&self, repository_id: u64) -> Result<Board, Error> {
         self.request(
@@ -217,6 +237,15 @@ impl Client {
         .json(position)
         .send_api_no_response()
     }
+}
+
+/// Zenhub Workspace.
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
+pub struct Workspace {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub id: String,
+    pub repositories: Vec<u64>,
 }
 
 /// Zenhub issue data.
