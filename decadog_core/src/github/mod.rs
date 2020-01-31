@@ -139,6 +139,22 @@ impl Client {
         .send_github()
     }
 
+    /// Get milestones by owner and repo name.
+    pub fn create_milestone(
+        &self,
+        owner: &str,
+        repo: &str,
+        create: &MilestoneUpdate,
+    ) -> Result<Milestone, Error> {
+        self.request(
+            Method::POST,
+            self.base_url
+                .join(&format!("/repos/{}/{}/milestones", owner, repo))?,
+        )
+        .json(&create)
+        .send_github()
+    }
+
     /// Update issue.
     pub fn patch_issue(
         &self,

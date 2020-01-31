@@ -10,8 +10,8 @@ pub trait AssignedTo<T> {
 
 /// A sprint.
 #[derive(Debug, Clone)]
-pub struct Sprint<'a> {
-    pub milestone: &'a Milestone,
+pub struct Sprint {
+    pub milestone: Milestone,
     pub start_date: StartDate,
 }
 
