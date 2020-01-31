@@ -18,7 +18,7 @@ use github::{
     paginate::PaginatedSearch, Direction, Issue, IssueUpdate, Milestone, MilestoneUpdate,
     OrganisationMember, Repository, SearchIssues, State,
 };
-use zenhub::{Board, Pipeline, PipelinePosition, StartDate};
+use zenhub::{Board, Pipeline, PipelinePosition, StartDate, Workspace};
 
 /// Decadog client, used to abstract complex tasks over several APIs.
 pub struct Client<'a> {
@@ -77,9 +77,18 @@ impl<'a> Client<'a> {
         self.zenhub.get_start_date(repository.id, milestone.number)
     }
 
+    /// Get Zenhub first workspace for a repository.
+    pub fn get_first_workspace(&self, repository: &Repository) -> Result<Workspace, Error> {
+        self.zenhub.get_first_workspace(repository.id)
+    }
+
     /// Get Zenhub board for a repository.
-    pub fn get_board(&self, repository: &Repository) -> Result<Board, Error> {
-        self.zenhub.get_board(repository.id)
+    pub fn get_board(
+        &self,
+        repository: &Repository,
+        workspace: &Workspace,
+    ) -> Result<Board, Error> {
+        self.zenhub.get_board(repository.id, &workspace.id)
     }
 
     /// Get Zenhub issue metadata.
@@ -145,6 +154,7 @@ impl<'a> Client<'a> {
     pub fn move_issue_to_pipeline(
         &self,
         repository: &Repository,
+        workspace: &Workspace,
         issue: &Issue,
         pipeline: &Pipeline,
     ) -> Result<(), Error> {
@@ -152,7 +162,7 @@ impl<'a> Client<'a> {
         position.pipeline_id = pipeline.id.clone();
 
         self.zenhub
-            .move_issue(repository.id, issue.number, &position)
+            .move_issue(repository.id, &workspace.id, issue.number, &position)
     }
 
     /// Get a repository from the API.

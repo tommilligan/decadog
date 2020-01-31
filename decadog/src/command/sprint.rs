@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, FixedOffset, Local};
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
 use decadog_core::github::{self, Milestone, OrganisationMember, Repository, State};
-use decadog_core::zenhub::{self, Estimate, Pipeline};
+use decadog_core::zenhub::{self, Estimate, Pipeline, Workspace};
 use decadog_core::{AssignedTo, Client};
 use lazy_static::lazy_static;
 use log::error;
@@ -83,6 +83,7 @@ struct MilestoneManager<'a> {
     milestone: &'a Milestone,
 
     repository: Repository,
+    workspace: Workspace,
     pipeline_options: FuzzySelect<Pipeline>,
     member_options: FuzzySelect<OrganisationMember>,
 }
@@ -102,8 +103,9 @@ impl<'a> MilestoneManager<'a> {
             .collect();
 
         let repository = client.get_repository()?;
+        let workspace = client.get_first_workspace(&repository)?;
 
-        let board = client.get_board(&repository)?;
+        let board = client.get_board(&repository, &workspace)?;
         let pipeline_options: FuzzySelect<Pipeline> = board
             .pipelines
             .into_iter()
@@ -114,6 +116,7 @@ impl<'a> MilestoneManager<'a> {
             client,
             milestone,
             repository,
+            workspace,
             member_options,
             pipeline_options,
         })
@@ -168,8 +171,12 @@ impl<'a> MilestoneManager<'a> {
         if issue.assigned_to(pipeline) {
             eprintln!("Already in pipeline.");
         } else {
-            self.client
-                .move_issue_to_pipeline(&self.repository, &issue, &pipeline)?;
+            self.client.move_issue_to_pipeline(
+                &self.repository,
+                &self.workspace,
+                &issue,
+                &pipeline,
+            )?;
         }
 
         let update_assignment = if issue.assignees.is_empty() {

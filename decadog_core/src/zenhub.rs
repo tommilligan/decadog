@@ -126,12 +126,34 @@ impl Client {
             .headers(self.headers.clone())
     }
 
-    /// Get Zenhub board for a repository.
-    pub fn get_board(&self, repository_id: u64) -> Result<Board, Error> {
+    /// Get the first Zenhub workspace for a repository.
+    pub fn get_first_workspace(&self, repository_id: u64) -> Result<Workspace, Error> {
+        self.get_workspaces(repository_id)?
+            .into_iter()
+            .nth(0)
+            .ok_or_else(|| Error::Unknown {
+                description: "No Zenhub workspace found for repository.".to_owned(),
+            })
+    }
+
+    /// Get Zenhub workspaces for a repository.
+    pub fn get_workspaces(&self, repository_id: u64) -> Result<Vec<Workspace>, Error> {
         self.request(
             Method::GET,
             self.base_url
-                .join(&format!("/p1/repositories/{}/board", repository_id))?,
+                .join(&format!("/p2/repositories/{}/workspaces", repository_id))?,
+        )
+        .send_api()
+    }
+
+    /// Get Zenhub board for a repository.
+    pub fn get_board(&self, repository_id: u64, workspace_id: &str) -> Result<Board, Error> {
+        self.request(
+            Method::GET,
+            self.base_url.join(&format!(
+                "/p2/workspaces/{}/repositories/{}/board",
+                workspace_id, repository_id
+            ))?,
         )
         .send_api()
     }
@@ -204,19 +226,29 @@ impl Client {
     pub fn move_issue(
         &self,
         repository_id: u64,
+        workspace_id: &str,
         issue_number: u32,
         position: &PipelinePosition,
     ) -> Result<(), Error> {
         self.request(
             Method::POST,
             self.base_url.join(&format!(
-                "/p1/repositories/{}/issues/{}/moves",
-                repository_id, issue_number
+                "/p2/workspaces/{}/repositories/{}/issues/{}/moves",
+                workspace_id, repository_id, issue_number
             ))?,
         )
         .json(position)
         .send_api_no_response()
     }
+}
+
+/// Zenhub Workspace.
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
+pub struct Workspace {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub id: String,
+    pub repositories: Vec<u64>,
 }
 
 /// Zenhub issue data.
@@ -262,7 +294,6 @@ pub struct PipelineIssue {
     pub issue_number: u32,
     pub estimate: Option<Estimate>,
     pub is_epic: bool,
-    pub position: u32,
 }
 
 /// A Zenhub pipeline.
