@@ -103,12 +103,38 @@ impl<'a> Client<'a> {
     }
 
     /// Get sprint for milestone.
-    pub fn get_sprint<'b>(
+    pub fn get_sprint(
         &self,
         repository: &Repository,
-        milestone: &'b Milestone,
-    ) -> Result<Sprint<'b>, Error> {
-        let start_date = self.get_start_date(repository, milestone)?;
+        milestone: Milestone,
+    ) -> Result<Sprint, Error> {
+        let start_date = self.get_start_date(repository, &milestone)?;
+        Ok(Sprint {
+            milestone,
+            start_date,
+        })
+    }
+
+    /// Create a new sprint.
+    pub fn create_sprint(
+        &self,
+        repository: &Repository,
+        sprint_number: &str,
+        start_date: DateTime<FixedOffset>,
+        due_on: DateTime<FixedOffset>,
+    ) -> Result<Sprint, Error> {
+        let mut milestone_spec = MilestoneUpdate::default();
+        milestone_spec.title = Some(format!("Sprint {}", sprint_number));
+        milestone_spec.due_on = Some(due_on);
+
+        let milestone = self
+            .github
+            .create_milestone(self.owner, self.repo, &milestone_spec)?;
+
+        let start_date = start_date.into();
+        let start_date =
+            self.zenhub
+                .set_start_date(repository.id, milestone.number, &start_date)?;
         Ok(Sprint {
             milestone,
             start_date,

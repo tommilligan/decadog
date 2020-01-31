@@ -152,6 +152,24 @@ impl Client {
         .send_api()
     }
 
+    /// Set Zenhub StartDate for a milestone.
+    pub fn set_start_date(
+        &self,
+        repository_id: u64,
+        milestone_number: u32,
+        start_date: &StartDate,
+    ) -> Result<StartDate, Error> {
+        self.request(
+            Method::POST,
+            self.base_url.join(&format!(
+                "/p1/repositories/{}/milestones/{}/start_date",
+                repository_id, milestone_number
+            ))?,
+        )
+        .json(&start_date)
+        .send_api()
+    }
+
     /// Get Zenhub issue metadata.
     pub fn get_issue(&self, repository_id: u64, issue_number: u32) -> Result<Issue, Error> {
         self.request(
@@ -281,6 +299,14 @@ pub struct Board {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct StartDate {
     pub start_date: DateTime<FixedOffset>,
+}
+
+impl From<DateTime<FixedOffset>> for StartDate {
+    fn from(datetime: DateTime<FixedOffset>) -> Self {
+        Self {
+            start_date: datetime,
+        }
+    }
 }
 
 #[cfg(test)]

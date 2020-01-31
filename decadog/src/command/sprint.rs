@@ -1,5 +1,6 @@
 use std::fmt::{self, Display};
 
+use chrono::{DateTime, Duration, FixedOffset, Local};
 use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
 use decadog_core::github::{self, Milestone, OrganisationMember, Repository, State};
@@ -235,6 +236,46 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
     milestone_manager.manage()
 }
 
+fn create_sprint(settings: &Settings) -> Result<(), Error> {
+    let github = github::Client::new(&settings.github_url, &settings.github_token.value())?;
+    let zenhub = zenhub::Client::new(
+        settings
+            .zenhub_url
+            .as_ref()
+            .ok_or(Error::Settings {
+                description: "Zenhub url required to create sprint.".to_owned(),
+            })?
+            .as_ref(),
+        settings
+            .zenhub_token
+            .as_ref()
+            .ok_or(Error::Settings {
+                description: "Zenhub token required to create sprint.".to_owned(),
+            })?
+            .as_ref(),
+    )?;
+    let client = Client::new(&settings.owner, &settings.repo, &github, &zenhub)?;
+
+    // Select milestone to move tickets to
+    if Confirmation::new("Create sprint from today for two weeks?").interact()? {
+        let sprint_number = Input::<String>::new()
+            .with_prompt("Sprint number")
+            .interact()?;
+
+        let repository = client.get_repository()?;
+        // Zenhub UI uses dates with midday, so copy that here
+        let start_date = DateTime::from_utc(
+            Local::today().naive_local().and_hms(12, 00, 00),
+            FixedOffset::east(0),
+        );
+        let due_on = start_date + Duration::days(13);
+        let sprint = client.create_sprint(&repository, &sprint_number, start_date, due_on)?;
+
+        eprintln!("Created '{}'", sprint.milestone.title);
+    }
+    Ok(())
+}
+
 fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     // To count as points in the sprint, the ticket must have been
     // - closed in the sprint period
@@ -278,10 +319,10 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
     let select_milestone =
         Select::new("Sprint to finish", &milestones).expect("At least one milestone is required.");
-    let open_milestone = select_milestone.interact()?;
+    let open_milestone = select_milestone.interact()?.to_owned();
 
     let repository = client.get_repository()?;
-    let sprint = client.get_sprint(&repository, &open_milestone)?;
+    let sprint = client.get_sprint(&repository, open_milestone)?;
 
     println!();
     println!("{}", "Issues closed in the sprint timeframe:".bold());
@@ -295,7 +336,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
         // If assigned to a different milestone, ignore
         if let Some(milestone) = &issue.milestone {
-            if milestone.id != open_milestone.id {
+            if milestone.id != sprint.milestone.id {
                 continue;
             };
         };
@@ -316,7 +357,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
                 &issue.number
             );
             if Confirmation::new("Assign to milestone?").interact()? {
-                client.assign_issue_to_milestone(&issue, Some(&open_milestone))?;
+                client.assign_issue_to_milestone(&issue, Some(&sprint.milestone))?;
             } else {
                 continue;
             }
@@ -332,7 +373,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     println!();
     println!("{}", "Issues open in sprint:".bold());
     let open_milestone_issues = client
-        .get_milestone_open_issues(&open_milestone)?
+        .get_milestone_open_issues(&sprint.milestone)?
         .collect::<Result<Vec<_>, _>>()?;
     for issue in open_milestone_issues.iter() {
         println!("{}", issue);
@@ -354,7 +395,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     println!("Calucating points summary...");
     let mut points_in_milestone: u32 = 0;
     let mut points_in_milestone_open: u32 = 0;
-    for issue_result in client.get_milestone_issues(&open_milestone)?.into_iter() {
+    for issue_result in client.get_milestone_issues(&sprint.milestone)?.into_iter() {
         let issue = issue_result.unwrap();
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
         let issue_estimate = match zenhub_issue.estimate {
@@ -381,15 +422,15 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         // done out of sprint>]
         let new_title = format!(
             "{} [{}/{} + {}]",
-            open_milestone.title,
+            sprint.milestone.title,
             sprint_points.done_in_sprint,
             sprint_points.planned,
             sprint_points.done_out_of_sprint
         );
-        client.update_milestone_title(open_milestone, new_title)?;
+        client.update_milestone_title(&sprint.milestone, new_title)?;
 
         println!("Closing milestone.");
-        client.close_milestone(&open_milestone)?;
+        client.close_milestone(&sprint.milestone)?;
         println!("Removing open issues from milestone...");
         for issue in open_milestone_issues.iter() {
             client.assign_issue_to_milestone(&issue, None)?;
@@ -404,6 +445,9 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {
     if let (subcommand_name, Some(_)) = matches.subcommand() {
         match subcommand_name {
+            "create" => {
+                create_sprint(settings)?;
+            }
             "start" => {
                 start_sprint(settings)?;
             }
@@ -419,6 +463,7 @@ pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {
 pub fn subcommand<'a, 'b>() -> App<'a, 'b> {
     SubCommand::with_name("sprint")
         .about("Manage sprints.")
+        .subcommand(SubCommand::with_name("create").about("Create a new sprint."))
         .subcommand(
             SubCommand::with_name("start")
                 .about("Assign issues to a sprint, and people to issues."),
