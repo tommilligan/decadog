@@ -62,12 +62,12 @@ impl Display for SprintPoints {
         write!(
             f,
             r#"Total done: {}
-    Done in sprint: {}
-    Done out of sprint: {}
-
-    Planned: {}
-    Planned but not done: {}
-    Total in milestone: {}"#,
+---
+Done in sprint: {}
+Done out of sprint: {}
+Planned: {}
+Planned but not done: {}
+Total in milestone: {}"#,
             self.done_total,
             self.done_in_sprint,
             self.done_out_of_sprint,
@@ -348,7 +348,13 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
             };
         };
 
-        println!("{}", &issue);
+        let link = format!(
+            "https://github.com/{}/{}/issues/{}",
+            &client.owner(),
+            &client.repo(),
+            &issue.number
+        );
+        println!("{} -> {}", &issue, link);
 
         // This variable keeps track of whether an issue was planned or not. Issues are considered
         // planned if they belong to the current milestone at time of closing the sprint. If an
@@ -357,12 +363,6 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         // If no milestone, ask to assign to open milestone and if applicable mark as not planned
         // If answer is no, ignore this issue
         if issue.milestone.is_none() {
-            println!(
-                "https://github.com/{}/{}/issues/{}",
-                &client.owner(),
-                &client.repo(),
-                &issue.number
-            );
             if Confirmation::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, Some(&sprint.milestone))?;
             } else {
