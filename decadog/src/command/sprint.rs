@@ -208,21 +208,21 @@ impl<'a> MilestoneManager<'a> {
     }
 }
 
-fn start_sprint(settings: &Settings) -> Result<(), Error> {
+fn sync_sprint(settings: &Settings) -> Result<(), Error> {
     let github = github::Client::new(&settings.github_url, &settings.github_token.value())?;
     let zenhub = zenhub::Client::new(
         settings
             .zenhub_url
             .as_ref()
             .ok_or(Error::Settings {
-                description: "Zenhub url required to start sprint.".to_owned(),
+                description: "Zenhub url required to sync sprint.".to_owned(),
             })?
             .as_ref(),
         settings
             .zenhub_token
             .as_ref()
             .ok_or(Error::Settings {
-                description: "Zenhub token required to start sprint.".to_owned(),
+                description: "Zenhub token required to sync sprint.".to_owned(),
             })?
             .as_ref(),
     )?;
@@ -236,7 +236,7 @@ fn start_sprint(settings: &Settings) -> Result<(), Error> {
     }
 
     let select_milestone =
-        Select::new("Sprint to start", &milestones).expect("At least one milestone is required.");
+        Select::new("Sprint to sync", &milestones).expect("At least one milestone is required.");
     let open_milestone = select_milestone.interact()?;
 
     let milestone_manager = MilestoneManager::new(&client, open_milestone)?;
@@ -455,8 +455,8 @@ pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {
             "create" => {
                 create_sprint(settings)?;
             }
-            "start" => {
-                start_sprint(settings)?;
+            "sync" => {
+                sync_sprint(settings)?;
             }
             "finish" => {
                 finish_sprint(settings)?;
@@ -472,8 +472,7 @@ pub fn subcommand<'a, 'b>() -> App<'a, 'b> {
         .about("Manage sprints.")
         .subcommand(SubCommand::with_name("create").about("Create a new sprint."))
         .subcommand(
-            SubCommand::with_name("start")
-                .about("Assign issues to a sprint, and people to issues."),
+            SubCommand::with_name("sync").about("Assign issues to a sprint, and people to issues."),
         )
         .subcommand(SubCommand::with_name("finish").about("Tidy up and close a sprint."))
 }
