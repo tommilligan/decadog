@@ -6,7 +6,10 @@ use std::hash::Hasher;
 use chrono::{DateTime, FixedOffset};
 use log::debug;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
-use reqwest::{Client as ReqwestClient, Method, RequestBuilder, Url};
+use reqwest::{
+    blocking::{Client as ReqwestClient, RequestBuilder},
+    Method, Url,
+};
 use serde_derive::{Deserialize, Serialize};
 
 use crate::error::Error;
@@ -51,7 +54,7 @@ impl Client {
     pub fn new(url: &str, token: &str) -> Result<Client, Error> {
         // Create reqwest client to interact with APIs
         // TODO: should we pass in an external client here?
-        let reqwest_client = reqwest::Client::new();
+        let reqwest_client = ReqwestClient::new();
 
         let mut headers = HeaderMap::new();
         headers.insert(

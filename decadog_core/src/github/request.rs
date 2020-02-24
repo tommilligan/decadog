@@ -1,8 +1,9 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+use reqwest::blocking::{RequestBuilder, Response};
 use reqwest::header::LINK;
-use reqwest::{RequestBuilder, Response, Url};
 use serde::de::DeserializeOwned;
+use url::Url;
 
 use crate::error::Error;
 
@@ -13,7 +14,7 @@ lazy_static! {
 
 /// Interpret a response with potential JSON errors from the Github API.
 pub trait ResponseExt {
-    fn from_github<T>(&mut self) -> Result<T, Error>
+    fn into_github<T>(self) -> Result<T, Error>
     where
         Self: Sized,
         T: DeserializeOwned;
@@ -22,7 +23,7 @@ pub trait ResponseExt {
 }
 
 impl ResponseExt for Response {
-    fn from_github<T>(&mut self) -> Result<T, Error>
+    fn into_github<T>(self) -> Result<T, Error>
     where
         Self: Sized,
         T: DeserializeOwned,
@@ -73,7 +74,7 @@ impl RequestBuilderExt for RequestBuilder {
         Self: Sized,
         T: DeserializeOwned,
     {
-        let mut response = self.send()?;
-        response.from_github()
+        let response = self.send()?;
+        response.into_github()
     }
 }
