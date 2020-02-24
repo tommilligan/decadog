@@ -1,5 +1,6 @@
-use reqwest::{Error as ReqwestError, StatusCode, UrlError};
+use reqwest::{Error as ReqwestError, StatusCode};
 use snafu::Snafu;
+use url::ParseError as UrlParseError;
 
 use crate::github::GithubClientErrorBody;
 
@@ -25,7 +26,7 @@ pub enum Error {
     Reqwest { source: ReqwestError },
 
     #[snafu(display("Url parse error: {}", source))]
-    Url { source: UrlError },
+    Url { source: UrlParseError },
 
     #[snafu(display("Unknown error: {}", description))]
     Unknown { description: String },
@@ -37,8 +38,8 @@ impl From<ReqwestError> for Error {
     }
 }
 
-impl From<UrlError> for Error {
-    fn from(source: UrlError) -> Self {
+impl From<UrlParseError> for Error {
+    fn from(source: UrlParseError) -> Self {
         Error::Url { source }
     }
 }

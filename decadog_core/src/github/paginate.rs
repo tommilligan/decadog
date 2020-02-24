@@ -1,10 +1,11 @@
 use std::vec::IntoIter;
 
 use log::debug;
+use reqwest::blocking::{Client as ReqwestClient, Request, Response};
 use reqwest::header::HeaderMap;
-use reqwest::{Client as ReqwestClient, Request, Response, Url};
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
+use url::Url;
 
 use crate::error::Error;
 
@@ -61,10 +62,10 @@ where
     /// Apply a response from the search API to update our state:
     /// - store the new items to iterate throught
     /// - extract and store the url for the next page
-    fn apply_response(&mut self, mut response: Response) -> Result<(), Error> {
+    fn apply_response(&mut self, response: Response) -> Result<(), Error> {
         self.next_page_url = response.next_page_url()?;
         self.page = response
-            .from_github::<GithubSearchResults<T>>()?
+            .into_github::<GithubSearchResults<T>>()?
             .items
             .into_iter();
         Ok(())
