@@ -1,13 +1,13 @@
 use std::fmt::{self, Display};
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
-use clap::{App, ArgMatches, SubCommand};
 use colored::Colorize;
 use decadog_core::github::{self, Milestone, OrganisationMember, Repository, State};
 use decadog_core::zenhub::{self, Estimate, Pipeline, Workspace};
 use decadog_core::{AssignedTo, Client};
 use lazy_static::lazy_static;
 use log::error;
+use structopt::StructOpt;
 
 use crate::interact::{Confirmation, FuzzySelect, Input, Select};
 use crate::{error::Error, Settings};
@@ -449,30 +449,25 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn execute(matches: &ArgMatches, settings: &Settings) -> Result<(), Error> {
-    if let (subcommand_name, Some(_)) = matches.subcommand() {
-        match subcommand_name {
-            "create" => {
-                create_sprint(settings)?;
-            }
-            "sync" => {
-                sync_sprint(settings)?;
-            }
-            "finish" => {
-                finish_sprint(settings)?;
-            }
-            _ => error!("Invalid subcommand."),
-        }
-    }
-    Ok(())
+#[derive(Debug, StructOpt)]
+pub enum Command {
+    #[structopt(name = "create")]
+    /// Create a new sprint.
+    Create,
+
+    #[structopt(name = "sync")]
+    /// Sync a physical board to the digital board.
+    Sync,
+
+    #[structopt(name = "finish")]
+    /// Finish an open sprint.
+    Finish,
 }
 
-pub fn subcommand<'a, 'b>() -> App<'a, 'b> {
-    SubCommand::with_name("sprint")
-        .about("Manage sprints.")
-        .subcommand(SubCommand::with_name("create").about("Create a new sprint."))
-        .subcommand(
-            SubCommand::with_name("sync").about("Assign issues to a sprint, and people to issues."),
-        )
-        .subcommand(SubCommand::with_name("finish").about("Tidy up and close a sprint."))
+pub fn run(command: &Command, settings: &Settings) -> Result<(), Error> {
+    match command {
+        Command::Create => create_sprint(settings),
+        Command::Sync => sync_sprint(settings),
+        Command::Finish => finish_sprint(settings),
+    }
 }

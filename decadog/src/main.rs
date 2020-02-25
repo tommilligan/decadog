@@ -1,16 +1,21 @@
 #![deny(clippy::all)]
-use clap::App;
+
+use std::path::PathBuf;
+
 use config;
 use decadog_core::secret::Secret;
 #[cfg(feature = "config_keyring")]
 use keyring::Keyring;
 use log::{debug, error};
 use serde_derive::{Deserialize, Serialize};
+use structopt::StructOpt;
 
+mod args;
 mod command;
 mod error;
 mod interact;
 
+use args::{Args, Command};
 use command::sprint;
 pub use error::Error;
 
@@ -26,13 +31,18 @@ pub struct Settings {
 }
 
 impl Settings {
-    pub fn load() -> Result<Self, config::ConfigError> {
+    /// Load settings. If a `config_path` is given, it must exist.
+    pub fn load(config_path: Option<PathBuf>) -> Result<Self, config::ConfigError> {
         debug!("Loading settings");
 
         let mut settings = config::Config::default();
         settings.set_default("github_url", "https://api.github.com/")?;
         settings.set_default("zenhub_url", "https://api.zenhub.io/")?;
-        settings.merge(config::File::with_name("decadog").required(false))?;
+        if let Some(config_path) = config_path {
+            settings.merge(config::File::from(config_path).required(true))?;
+        } else {
+            settings.merge(config::File::with_name("decadog").required(false))?;
+        }
         settings.merge(config::Environment::with_prefix("DECADOG"))?;
 
         #[cfg(feature = "config_keyring")]
@@ -59,33 +69,20 @@ impl Settings {
     }
 }
 
-pub fn run() -> Result<(), Error> {
-    let settings = Settings::load()?;
+fn run(args: Args) -> Result<(), Error> {
+    let settings = Settings::load(args.config)?;
 
-    let mut app = App::new("decadog")
-        .about("Github toolkit. Octocat++.")
-        .subcommand(sprint::subcommand());
-
-    let matches = app.clone().get_matches();
-    if let (subcommand_name, Some(subcommand_matches)) = matches.subcommand() {
-        match subcommand_name {
-            "sprint" => sprint::execute(subcommand_matches, &settings)?,
-            _ => {
-                error!("Subcommand '{}' not implemented.", subcommand_name);
-            }
-        }
-    } else {
-        app.print_help()?;
+    match args.command {
+        Command::Sprint { ref command } => sprint::run(command, &settings),
     }
-
-    Ok(())
 }
 
 pub fn main() {
     env_logger::init();
     debug!("Initialised logger.");
 
-    if let Err(error) = run() {
+    let args = Args::from_args();
+    if let Err(error) = run(args) {
         error!("{}", error);
     }
 }
