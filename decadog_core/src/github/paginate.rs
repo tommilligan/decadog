@@ -2,7 +2,6 @@ use std::vec::IntoIter;
 
 use log::debug;
 use reqwest::blocking::{Client as ReqwestClient, Request, Response};
-use reqwest::header::HeaderMap;
 use serde::de::DeserializeOwned;
 use serde_derive::{Deserialize, Serialize};
 use url::Url;
@@ -28,7 +27,6 @@ where
     T: DeserializeOwned,
 {
     client: &'a ReqwestClient,
-    headers: HeaderMap,
     page: IntoIter<T>,
     next_page_url: Option<Url>,
 }
@@ -41,15 +39,12 @@ where
     /// Create a new paginated search, and load the first page.
     pub fn new(client: &'a ReqwestClient, initial_request: Request) -> Result<Self, Error> {
         // The initial request is a special case
-        // Copy the headers out first to use them for auth on subsequent requests
-        let headers = initial_request.headers().clone();
         debug!("{} {}", initial_request.method(), initial_request.url());
         let response = client.execute(initial_request)?;
 
         // Apply our intial response to an empty struct
         let mut new_self = Self {
             client,
-            headers,
             page: vec![].into_iter(),
             next_page_url: None,
         };
@@ -74,7 +69,7 @@ where
     /// Fetch the next page, and apply the response to our state.
     fn update_page(&mut self, url: Url) -> Result<(), Error> {
         debug!("GET {}", &url);
-        let request = self.client.get(url).headers(self.headers.clone()).build()?;
+        let request = self.client.get(url).build()?;
         let response = self.client.execute(request)?;
         self.apply_response(response)?;
         Ok(())

@@ -7,7 +7,7 @@ use chrono::{DateTime, FixedOffset};
 use log::debug;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::{
-    blocking::{Client as ReqwestClient, RequestBuilder},
+    blocking::{Client as ReqwestClient, ClientBuilder, RequestBuilder},
     Method, Url,
 };
 use serde_derive::{Deserialize, Serialize};
@@ -23,7 +23,6 @@ use request::RequestBuilderExt;
 pub struct Client {
     id: u64,
     reqwest_client: ReqwestClient,
-    headers: HeaderMap,
     base_url: Url,
 }
 
@@ -54,8 +53,6 @@ impl Client {
     pub fn new(url: &str, token: &str) -> Result<Client, Error> {
         // Create reqwest client to interact with APIs
         // TODO: should we pass in an external client here?
-        let reqwest_client = ReqwestClient::new();
-
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -65,6 +62,11 @@ impl Client {
                     description: "Invalid Github token for Authorization header.".to_owned(),
                 })?,
         );
+
+        let reqwest_client = ClientBuilder::new()
+            .default_headers(headers)
+            .user_agent("decadog")
+            .build()?;
 
         let base_url = Url::parse(url).map_err(|_| Error::Config {
             description: format!("Invalid Github base url {}", url),
@@ -78,7 +80,6 @@ impl Client {
         Ok(Client {
             id,
             reqwest_client,
-            headers,
             base_url,
         })
     }
@@ -90,9 +91,7 @@ impl Client {
     /// Returns a `request::RequestBuilder` authorized to the Github API.
     pub fn request(&self, method: Method, url: Url) -> RequestBuilder {
         debug!("{} {}", method, url.as_str());
-        self.reqwest_client
-            .request(method, url)
-            .headers(self.headers.clone())
+        self.reqwest_client.request(method, url)
     }
 
     /// Get an issue by owner, repo name and issue number.
