@@ -324,6 +324,7 @@ pub struct Issue {
     pub created_at: DateTime<FixedOffset>,
     pub updated_at: DateTime<FixedOffset>,
     pub closed_at: Option<DateTime<FixedOffset>>,
+    pub html_url: String,
 }
 
 /// A Github Repository.
@@ -395,7 +396,8 @@ pub mod tests {
     "due_on": "2012-10-09T23:39:01Z"
   },
   "created_at": "2011-04-22T13:33:48Z",
-  "updated_at": "2011-04-22T13:33:48Z"
+  "updated_at": "2011-04-22T13:33:48Z",
+  "html_url": "http://foo.bar"
 }"#;
         let mock = mock("GET", "/repos/tommilligan/decadog/issues/1")
             .match_header("authorization", "token mock_token")
@@ -432,6 +434,7 @@ pub mod tests {
                 updated_at: FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
                 closed_at: None,
+                html_url: "http://foo.bar".to_owned(),
             }
         );
     }
@@ -447,7 +450,8 @@ pub mod tests {
   "assignees": [],
   "milestone": null,
   "created_at": "2011-04-22T13:33:48Z",
-  "updated_at": "2011-04-22T13:33:48Z"
+  "updated_at": "2011-04-22T13:33:48Z",
+  "html_url": "http://foo.bar"
 }"#;
         let mock = mock("PATCH", "/repos/tommilligan/decadog/issues/1")
             .match_header("authorization", "token mock_token")
@@ -477,6 +481,7 @@ pub mod tests {
                 updated_at: FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
                 closed_at: None,
+                html_url: "http://foo.bar".to_owned(),
             }
         );
     }
