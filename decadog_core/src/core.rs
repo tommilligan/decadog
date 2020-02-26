@@ -68,6 +68,7 @@ mod tests {
                 created_at: *DEFAULT_DATETIME_FIXED,
                 updated_at: *DEFAULT_DATETIME_FIXED,
                 closed_at: Some(*DEFAULT_DATETIME_FIXED),
+                html_url: Default::default(),
             }
         }
     }

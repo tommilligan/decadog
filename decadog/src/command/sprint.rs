@@ -333,14 +333,10 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
 
     println!();
     println!("{}", "Issues closed in the sprint timeframe:".bold());
-    for issue in client
+    let closed_issues = client
         .get_issues_closed_after(&sprint.start_date.start_date)?
-        .into_iter()
-    {
-        // TODO(tommilligan) I feel like there's a better way to iterate over
-        // Result<T, E>, and early return at the first error value
-        let issue = issue?;
-
+        .collect::<Result<Vec<_>, _>>()?;
+    for issue in closed_issues.into_iter() {
         // If assigned to a different milestone, ignore
         if let Some(milestone) = &issue.milestone {
             if milestone.id != sprint.milestone.id {
@@ -348,21 +344,25 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
             };
         };
 
-        let link = format!(
-            "https://github.com/{}/{}/issues/{}",
-            &client.owner(),
-            &client.repo(),
-            &issue.number
-        );
-        println!("{} -> {}", &issue, link);
+        let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
+        // If it's an epic, ignore
+        if zenhub_issue.is_epic {
+            continue;
+        };
 
-        // This variable keeps track of whether an issue was planned or not. Issues are considered
-        // planned if they belong to the current milestone at time of closing the sprint. If an
-        // issue is added to the milestone at the end of the sprint, then it is considered as out
-        // of sprint.
+        // We only want to show the issue description once
+        let mut description_shown = false;
+        let mut show_description_once = || {
+            if !description_shown {
+                println!("{} -> {}", &issue, &issue.html_url);
+                description_shown = true;
+            }
+        };
+
         // If no milestone, ask to assign to open milestone and if applicable mark as not planned
-        // If answer is no, ignore this issue
+        // If answer is no, ignore
         if issue.milestone.is_none() {
+            show_description_once();
             if Confirmation::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, Some(&sprint.milestone))?;
             } else {
@@ -370,8 +370,8 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
             }
         };
 
-        let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
         if zenhub_issue.estimate == None {
+            show_description_once();
             let new_estimate = select_estimate.interact()?;
             client.set_estimate(&repository, &issue, new_estimate.value)?;
         };
@@ -402,8 +402,10 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     println!("Calucating points summary...");
     let mut points_in_milestone: u32 = 0;
     let mut points_in_milestone_open: u32 = 0;
-    for issue_result in client.get_milestone_issues(&sprint.milestone)?.into_iter() {
-        let issue = issue_result.unwrap();
+    let milestone_issues = client
+        .get_milestone_issues(&sprint.milestone)?
+        .collect::<Result<Vec<_>, _>>()?;
+    for issue in milestone_issues.into_iter() {
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;
         let issue_estimate = match zenhub_issue.estimate {
             Some(estimate) => estimate.value,
