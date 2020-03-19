@@ -20,7 +20,7 @@ serde = "1.0.103"
 serde_derive = "1.0.103"
 snafu = "0.6.2"
 chrono = "0.4.11"
-structopt = "0.3.11"
+structopt = "0.3.12"
 
 [features]
 default_features = ["config_keyring"]
