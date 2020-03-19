@@ -130,7 +130,7 @@ impl Client {
     pub fn get_first_workspace(&self, repository_id: u64) -> Result<Workspace, Error> {
         self.get_workspaces(repository_id)?
             .into_iter()
-            .nth(0)
+            .next()
             .ok_or_else(|| Error::Unknown {
                 description: "No Zenhub workspace found for repository.".to_owned(),
             })
