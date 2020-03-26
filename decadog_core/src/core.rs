@@ -65,6 +65,7 @@ mod tests {
                 title: Default::default(),
                 milestone: Default::default(),
                 assignees: Default::default(),
+                labels: Default::default(),
                 created_at: *DEFAULT_DATETIME_FIXED,
                 updated_at: *DEFAULT_DATETIME_FIXED,
                 closed_at: Some(*DEFAULT_DATETIME_FIXED),

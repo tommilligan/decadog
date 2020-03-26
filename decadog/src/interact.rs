@@ -2,10 +2,8 @@ use std::fmt::Display;
 use std::io;
 use std::iter::FromIterator;
 
-use dialoguer;
 pub use dialoguer::Input;
 use indexmap::IndexMap;
-use scout;
 use snafu::Snafu;
 
 use crate::error::Error;

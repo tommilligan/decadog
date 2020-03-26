@@ -3,7 +3,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::fmt;
 use std::hash::Hasher;
 
-use chrono::{DateTime, FixedOffset};
+use chrono::{DateTime, FixedOffset, TimeZone};
 use log::debug;
 use reqwest::header::{HeaderMap, AUTHORIZATION};
 use reqwest::{
@@ -236,6 +236,76 @@ pub enum Direction {
     Descending,
 }
 
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct SearchQueryBuilder {
+    query: String,
+}
+
+impl SearchQueryBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn build(self) -> String {
+        self.query
+    }
+
+    fn push_separator(&mut self) {
+        if !self.query.is_empty() {
+            self.query.push_str(" ");
+        };
+    }
+
+    pub fn term(mut self, term: &str) -> Self {
+        self.push_separator();
+        self.query.push_str(term);
+        self
+    }
+
+    pub fn key_value(mut self, key: &str, value: &str) -> Self {
+        self.push_separator();
+        self.query.push_str(key);
+        self.query.push_str(":");
+        self.query.push_str(value);
+        self
+    }
+
+    pub fn label(self, label_name: &str) -> Self {
+        self.key_value("label", label_name)
+    }
+
+    pub fn not_label(self, label_name: &str) -> Self {
+        self.key_value("-label", label_name)
+    }
+
+    pub fn issue(self) -> Self {
+        self.key_value("type", "issue")
+    }
+
+    pub fn state(self, state: &State) -> Self {
+        self.key_value(
+            "state",
+            &serde_plain::to_string(state).expect("Serializing state to string failed"),
+        )
+    }
+
+    pub fn milestone(self, milestone_title: &str) -> Self {
+        self.term(&format!(r#"milestone:"{}""#, milestone_title))
+    }
+
+    pub fn closed_on_or_after<Tz: TimeZone>(self, datetime: &DateTime<Tz>) -> Self
+    where
+        Tz::Offset: fmt::Display,
+    {
+        self.state(&State::Closed)
+            .term(&format!("closed:>={}", &datetime.format("%Y-%m-%d")))
+    }
+
+    pub fn owner_repo(self, owner: &str, repo: &str) -> Self {
+        self.term(&format!("repo:{}/{}", owner, repo))
+    }
+}
+
 /// Request to search issues.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
 pub struct SearchIssues {
@@ -298,6 +368,13 @@ pub struct User {
     pub name: String,
 }
 
+/// A Github label.
+#[derive(Deserialize, Serialize, Debug, Clone, Default, PartialEq)]
+pub struct Label {
+    pub id: u32,
+    pub name: String,
+}
+
 /// A Github status.
 #[derive(Deserialize, Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -321,6 +398,7 @@ pub struct Issue {
     pub title: String,
     pub milestone: Option<Milestone>,
     pub assignees: Vec<OrganisationMember>,
+    pub labels: Vec<Label>,
     pub created_at: DateTime<FixedOffset>,
     pub updated_at: DateTime<FixedOffset>,
     pub closed_at: Option<DateTime<FixedOffset>>,
@@ -375,6 +453,53 @@ pub mod tests {
     }
 
     #[test]
+    fn search_query_builder() {
+        /// Takes the following pairs of arguments:
+        ///
+        /// - a callback which takes a new SearchQueryBuilder and returns a SearchQueryBuilder
+        ///
+        /// ```
+        /// fn (q: SearchQueryBuilder) -> SearchQueryBuilder {
+        ///     ...
+        /// }
+        /// ```
+        ///
+        /// - the expected value after building the query
+        macro_rules! assert_builds_to {
+            ($(($build_pipeline:expr, $expected:literal),)*) => {
+            $(
+                assert_eq!(&$build_pipeline(SearchQueryBuilder::new()).build(), $expected);
+            )*
+            }
+        }
+
+        assert_builds_to! {
+            (|q| q, ""),
+            (|q: SearchQueryBuilder| q.state(&State::Open), "state:open"),
+            (|q: SearchQueryBuilder| q.issue().label("spam"), "type:issue label:spam"),
+            (
+                |q: SearchQueryBuilder| q.milestone("Sprint 2").not_label("spam"),
+                r#"milestone:"Sprint 2" -label:spam"#
+            ),
+            (
+                |q: SearchQueryBuilder| q.term("arbitrary").key_value("k", "v"),
+                "arbitrary k:v"
+            ),
+            (
+                |q: SearchQueryBuilder| {
+                    q.closed_on_or_after(
+                        &FixedOffset::east(0)
+                            .from_utc_datetime(
+                                &NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                    )
+                    .owner_repo("ow", "re")
+                },
+                "state:closed closed:>=2011-04-22 repo:ow/re"
+            ),
+        }
+    }
+
+    #[test]
     fn test_get_issue() {
         let body = r#"{
   "id": 1234567,
@@ -395,6 +520,12 @@ pub mod tests {
     "title": "v1.0",
     "due_on": "2012-10-09T23:39:01Z"
   },
+  "labels": [
+    {
+      "id": 248,
+      "name": "taggy"
+    }
+  ],
   "created_at": "2011-04-22T13:33:48Z",
   "updated_at": "2011-04-22T13:33:48Z",
   "html_url": "http://foo.bar"
@@ -429,6 +560,10 @@ pub mod tests {
                     login: "tommilligan".to_owned(),
                     id: 1
                 }],
+                labels: vec![Label {
+                    id: 248,
+                    name: "taggy".to_owned()
+                }],
                 created_at: FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
                 updated_at: FixedOffset::east(0)
@@ -449,6 +584,7 @@ pub mod tests {
   "body": "Mock description",
   "assignees": [],
   "milestone": null,
+  "labels": [],
   "created_at": "2011-04-22T13:33:48Z",
   "updated_at": "2011-04-22T13:33:48Z",
   "html_url": "http://foo.bar"
@@ -476,6 +612,7 @@ pub mod tests {
                 title: "Mock Title".to_owned(),
                 milestone: None,
                 assignees: vec![],
+                labels: vec![],
                 created_at: FixedOffset::east(0)
                     .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
                 updated_at: FixedOffset::east(0)

@@ -2,7 +2,9 @@ use std::fmt::{self, Display};
 
 use chrono::{DateTime, Duration, FixedOffset, Local};
 use colored::Colorize;
-use decadog_core::github::{self, Milestone, OrganisationMember, Repository, State};
+use decadog_core::github::{
+    self, Milestone, OrganisationMember, Repository, SearchQueryBuilder, State,
+};
 use decadog_core::zenhub::{self, Estimate, Pipeline, Workspace};
 use decadog_core::{AssignedTo, Client};
 use lazy_static::lazy_static;
@@ -334,7 +336,11 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     println!();
     println!("{}", "Issues closed in the sprint timeframe:".bold());
     let closed_issues = client
-        .get_issues_closed_after(&sprint.start_date.start_date)?
+        .search_issues(
+            SearchQueryBuilder::new()
+                .closed_on_or_after(&sprint.start_date.start_date)
+                .not_label("Z-obsolete"),
+        )?
         .collect::<Result<Vec<_>, _>>()?;
     for issue in closed_issues.into_iter() {
         // If assigned to a different milestone, ignore
@@ -380,7 +386,11 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     println!();
     println!("{}", "Issues open in sprint:".bold());
     let open_milestone_issues = client
-        .get_milestone_open_issues(&sprint.milestone)?
+        .search_issues(
+            SearchQueryBuilder::new()
+                .state(&State::Open)
+                .milestone(&sprint.milestone.title),
+        )?
         .collect::<Result<Vec<_>, _>>()?;
     for issue in open_milestone_issues.iter() {
         println!("{}", issue);
@@ -403,7 +413,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     let mut points_in_milestone: u32 = 0;
     let mut points_in_milestone_open: u32 = 0;
     let milestone_issues = client
-        .get_milestone_issues(&sprint.milestone)?
+        .search_issues(SearchQueryBuilder::new().milestone(&sprint.milestone.title))?
         .collect::<Result<Vec<_>, _>>()?;
     for issue in milestone_issues.into_iter() {
         let zenhub_issue = client.get_zenhub_issue(&repository, &issue)?;

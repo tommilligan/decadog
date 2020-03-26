@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-use config;
 use decadog_core::secret::Secret;
 #[cfg(feature = "config_keyring")]
 use keyring::Keyring;

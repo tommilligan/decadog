@@ -16,7 +16,7 @@ pub use crate::core::{AssignedTo, Sprint};
 pub use error::Error;
 use github::{
     paginate::PaginatedSearch, Direction, Issue, IssueUpdate, Milestone, MilestoneUpdate,
-    OrganisationMember, Repository, SearchIssues, State,
+    OrganisationMember, Repository, SearchIssues, SearchQueryBuilder, State,
 };
 use zenhub::{Board, Pipeline, PipelinePosition, StartDate, Workspace};
 
@@ -210,25 +210,6 @@ impl<'a> Client<'a> {
             .patch_issue(&self.owner, &self.repo, issue.number, &update)
     }
 
-    /// Get issues closed after the given datetime.
-    pub fn get_issues_closed_after(
-        &self,
-        datetime: &DateTime<FixedOffset>,
-    ) -> Result<PaginatedSearch<Issue>, Error> {
-        let query = SearchIssues {
-            q: format!(
-                "repo:{}/{} type:issue state:closed closed:>={}",
-                self.owner,
-                self.repo,
-                datetime.format("%Y-%m-%d")
-            ),
-            sort: Some("updated".to_owned()),
-            order: Some(Direction::Ascending),
-            per_page: Some(100),
-        };
-        self.github.search_issues(&query)
-    }
-
     /// Get issues in a given milestone.
     pub fn get_milestone_issues(
         &self,
@@ -246,16 +227,14 @@ impl<'a> Client<'a> {
         self.github.search_issues(&query)
     }
 
-    /// Get issues open in a given milestone.
-    pub fn get_milestone_open_issues(
+    /// Get issues by the given query, in ascending order of time updated.
+    pub fn search_issues(
         &self,
-        milestone: &Milestone,
+        query_builder: SearchQueryBuilder,
     ) -> Result<PaginatedSearch<Issue>, Error> {
+        let query_builder = query_builder.owner_repo(self.owner, self.repo).issue();
         let query = SearchIssues {
-            q: format!(
-                r#"repo:{}/{} type:issue state:open milestone:"{}""#,
-                self.owner, self.repo, milestone.title
-            ),
+            q: query_builder.build(),
             sort: Some("updated".to_owned()),
             order: Some(Direction::Ascending),
             per_page: Some(100),
@@ -314,16 +293,18 @@ mod tests {
   "incomplete_results": false,
   "items": []
 }"#;
-        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aclosed+closed%3A%3E%3D2011-04-22&sort=updated&order=asc&per_page=100")
+        let mock = mock("GET", "/search/issues?q=state%3Aclosed+closed%3A%3E%3D2011-04-22+repo%3Atommilligan%2Fdecadog+type%3Aissue&sort=updated&order=asc&per_page=100")
             .match_header("authorization", "token mock_token")
             .with_status(200)
             .with_body(body)
             .create();
 
         let issues = MOCK_CLIENT
-            .get_issues_closed_after(
-                &FixedOffset::east(0)
-                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+            .search_issues(
+                SearchQueryBuilder::new().closed_on_or_after(
+                    &FixedOffset::east(0)
+                        .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                ),
             )
             .unwrap()
             .collect::<Result<Vec<Issue>, _>>()
@@ -340,21 +321,18 @@ mod tests {
   "incomplete_results": false,
   "items": []
 }"#;
-        let mock = mock("GET", "/search/issues?q=repo%3Atommilligan%2Fdecadog+type%3Aissue+state%3Aopen+milestone%3A%22Sprint+2%22&sort=updated&order=asc&per_page=100")
+        let mock = mock("GET", "/search/issues?q=state%3Aopen+milestone%3A%22Sprint+2%22+repo%3Atommilligan%2Fdecadog+type%3Aissue&sort=updated&order=asc&per_page=100")
             .match_header("authorization", "token mock_token")
             .with_status(200)
             .with_body(body)
             .create();
 
         let issues = MOCK_CLIENT
-            .get_milestone_open_issues(&Milestone {
-                id: 12345,
-                number: 12,
-                title: "Sprint 2".to_owned(),
-                state: State::Open,
-                due_on: FixedOffset::east(0)
-                    .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
-            })
+            .search_issues(
+                SearchQueryBuilder::new()
+                    .state(&State::Open)
+                    .milestone("Sprint 2"),
+            )
             .unwrap()
             .collect::<Result<Vec<Issue>, _>>()
             .unwrap();
