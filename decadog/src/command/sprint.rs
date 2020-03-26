@@ -339,6 +339,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         .search_issues(
             SearchQueryBuilder::new()
                 .closed_on_or_after(&sprint.start_date.start_date)
+                .not_label("Z-obsolete"),
         )?
         .collect::<Result<Vec<_>, _>>()?;
     for issue in closed_issues.into_iter() {
