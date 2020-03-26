@@ -454,31 +454,49 @@ pub mod tests {
 
     #[test]
     fn search_query_builder() {
-        let q = SearchQueryBuilder::new();
-        assert_eq!(&q.clone().build(), "");
-        assert_eq!(&q.clone().state(&State::Open).build(), "state:open");
-        assert_eq!(
-            &q.clone().issue().label("spam").build(),
-            "type:issue label:spam"
-        );
-        assert_eq!(
-            &q.clone().milestone("Sprint 2").not_label("spam").build(),
-            r#"milestone:"Sprint 2" -label:spam"#
-        );
-        assert_eq!(
-            &q.clone().term("arbitrary").key_value("k", "v").build(),
-            r#"arbitrary k:v"#
-        );
-        assert_eq!(
-            &q.clone()
-                .closed_on_or_after(
-                    &FixedOffset::east(0)
-                        .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
-                )
-                .owner_repo("ow", "re")
-                .build(),
-            r#"state:closed closed:>=2011-04-22 repo:ow/re"#
-        );
+        /// Takes the following pairs of arguments:
+        ///
+        /// - a callback which takes a new SearchQueryBuilder and returns a SearchQueryBuilder
+        ///
+        /// ```
+        /// fn (q: SearchQueryBuilder) -> SearchQueryBuilder {
+        ///     ...
+        /// }
+        /// ```
+        ///
+        /// - the expected value after building the query
+        macro_rules! assert_builds_to {
+            ($(($build_pipeline:expr, $expected:literal),)*) => {
+            $(
+                assert_eq!(&$build_pipeline(SearchQueryBuilder::new()).build(), $expected);
+            )*
+            }
+        }
+
+        assert_builds_to! {
+            (|q| q, ""),
+            (|q: SearchQueryBuilder| q.state(&State::Open), "state:open"),
+            (|q: SearchQueryBuilder| q.issue().label("spam"), "type:issue label:spam"),
+            (
+                |q: SearchQueryBuilder| q.milestone("Sprint 2").not_label("spam"),
+                r#"milestone:"Sprint 2" -label:spam"#
+            ),
+            (
+                |q: SearchQueryBuilder| q.term("arbitrary").key_value("k", "v"),
+                "arbitrary k:v"
+            ),
+            (
+                |q: SearchQueryBuilder| {
+                    q.closed_on_or_after(
+                        &FixedOffset::east(0)
+                            .from_utc_datetime(
+                                &NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                    )
+                    .owner_repo("ow", "re")
+                },
+                "state:closed closed:>=2011-04-22 repo:ow/re"
+            ),
+        }
     }
 
     #[test]
