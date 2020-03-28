@@ -246,8 +246,8 @@ impl SearchQueryBuilder {
         Self::default()
     }
 
-    pub fn build(self) -> String {
-        self.query
+    pub fn build(&self) -> &str {
+        &self.query
     }
 
     fn push_separator(&mut self) {
@@ -256,13 +256,13 @@ impl SearchQueryBuilder {
         };
     }
 
-    pub fn term(mut self, term: &str) -> Self {
+    pub fn term(&mut self, term: &str) -> &mut Self {
         self.push_separator();
         self.query.push_str(term);
         self
     }
 
-    pub fn key_value(mut self, key: &str, value: &str) -> Self {
+    pub fn key_value(&mut self, key: &str, value: &str) -> &mut Self {
         self.push_separator();
         self.query.push_str(key);
         self.query.push_str(":");
@@ -270,30 +270,30 @@ impl SearchQueryBuilder {
         self
     }
 
-    pub fn label(self, label_name: &str) -> Self {
+    pub fn label(&mut self, label_name: &str) -> &mut Self {
         self.key_value("label", label_name)
     }
 
-    pub fn not_label(self, label_name: &str) -> Self {
+    pub fn not_label(&mut self, label_name: &str) -> &mut Self {
         self.key_value("-label", label_name)
     }
 
-    pub fn issue(self) -> Self {
+    pub fn issue(&mut self) -> &mut Self {
         self.key_value("type", "issue")
     }
 
-    pub fn state(self, state: &State) -> Self {
+    pub fn state(&mut self, state: &State) -> &mut Self {
         self.key_value(
             "state",
             &serde_plain::to_string(state).expect("Serializing state to string failed"),
         )
     }
 
-    pub fn milestone(self, milestone_title: &str) -> Self {
+    pub fn milestone(&mut self, milestone_title: &str) -> &mut Self {
         self.term(&format!(r#"milestone:"{}""#, milestone_title))
     }
 
-    pub fn closed_on_or_after<Tz: TimeZone>(self, datetime: &DateTime<Tz>) -> Self
+    pub fn closed_on_or_after<Tz: TimeZone>(&mut self, datetime: &DateTime<Tz>) -> &mut Self
     where
         Tz::Offset: fmt::Display,
     {
@@ -301,17 +301,17 @@ impl SearchQueryBuilder {
             .term(&format!("closed:>={}", &datetime.format("%Y-%m-%d")))
     }
 
-    pub fn owner_repo(self, owner: &str, repo: &str) -> Self {
+    pub fn owner_repo(&mut self, owner: &str, repo: &str) -> &mut Self {
         self.term(&format!("repo:{}/{}", owner, repo))
     }
 }
 
 /// Request to search issues.
 #[derive(Deserialize, Serialize, Debug, Clone, Default)]
-pub struct SearchIssues {
-    pub q: String,
+pub struct SearchIssues<'request> {
+    pub q: &'request str,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub sort: Option<String>,
+    pub sort: Option<&'request str>,
     /// Ignored unless `sort` is provided.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<Direction>,
@@ -454,49 +454,39 @@ pub mod tests {
 
     #[test]
     fn search_query_builder() {
-        /// Takes the following pairs of arguments:
-        ///
-        /// - a callback which takes a new SearchQueryBuilder and returns a SearchQueryBuilder
-        ///
-        /// ```
-        /// fn (q: SearchQueryBuilder) -> SearchQueryBuilder {
-        ///     ...
-        /// }
-        /// ```
-        ///
-        /// - the expected value after building the query
-        macro_rules! assert_builds_to {
-            ($(($build_pipeline:expr, $expected:literal),)*) => {
-            $(
-                assert_eq!(&$build_pipeline(SearchQueryBuilder::new()).build(), $expected);
-            )*
-            }
-        }
-
-        assert_builds_to! {
-            (|q| q, ""),
-            (|q: SearchQueryBuilder| q.state(&State::Open), "state:open"),
-            (|q: SearchQueryBuilder| q.issue().label("spam"), "type:issue label:spam"),
-            (
-                |q: SearchQueryBuilder| q.milestone("Sprint 2").not_label("spam"),
-                r#"milestone:"Sprint 2" -label:spam"#
-            ),
-            (
-                |q: SearchQueryBuilder| q.term("arbitrary").key_value("k", "v"),
-                "arbitrary k:v"
-            ),
-            (
-                |q: SearchQueryBuilder| {
-                    q.closed_on_or_after(
-                        &FixedOffset::east(0)
-                            .from_utc_datetime(
-                                &NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
-                    )
-                    .owner_repo("ow", "re")
-                },
-                "state:closed closed:>=2011-04-22 repo:ow/re"
-            ),
-        }
+        assert_eq!(SearchQueryBuilder::new().build(), "");
+        assert_eq!(
+            SearchQueryBuilder::new().state(&State::Open).build(),
+            "state:open"
+        );
+        assert_eq!(
+            SearchQueryBuilder::new().issue().label("spam").build(),
+            "type:issue label:spam"
+        );
+        assert_eq!(
+            SearchQueryBuilder::new()
+                .milestone("Sprint 2")
+                .not_label("spam")
+                .build(),
+            r#"milestone:"Sprint 2" -label:spam"#
+        );
+        assert_eq!(
+            SearchQueryBuilder::new()
+                .term("arbitrary")
+                .key_value("k", "v")
+                .build(),
+            "arbitrary k:v"
+        );
+        assert_eq!(
+            SearchQueryBuilder::new()
+                .closed_on_or_after(
+                    &FixedOffset::east(0)
+                        .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
+                )
+                .owner_repo("ow", "re")
+                .build(),
+            "state:closed closed:>=2011-04-22 repo:ow/re"
+        );
     }
 
     #[test]
