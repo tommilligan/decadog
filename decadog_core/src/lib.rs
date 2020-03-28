@@ -210,32 +210,17 @@ impl<'a> Client<'a> {
             .patch_issue(&self.owner, &self.repo, issue.number, &update)
     }
 
-    /// Get issues in a given milestone.
-    pub fn get_milestone_issues(
-        &self,
-        milestone: &Milestone,
-    ) -> Result<PaginatedSearch<Issue>, Error> {
-        let query = SearchIssues {
-            q: format!(
-                r#"repo:{}/{} type:issue milestone:"{}""#,
-                self.owner, self.repo, milestone.title
-            ),
-            sort: Some("updated".to_owned()),
-            order: Some(Direction::Ascending),
-            per_page: Some(100),
-        };
-        self.github.search_issues(&query)
-    }
-
     /// Get issues by the given query, in ascending order of time updated.
     pub fn search_issues(
         &self,
-        query_builder: SearchQueryBuilder,
+        query_builder: &mut SearchQueryBuilder,
     ) -> Result<PaginatedSearch<Issue>, Error> {
-        let query_builder = query_builder.owner_repo(self.owner, self.repo).issue();
         let query = SearchIssues {
-            q: query_builder.build(),
-            sort: Some("updated".to_owned()),
+            q: query_builder
+                .owner_repo(self.owner, self.repo)
+                .issue()
+                .build(),
+            sort: Some("updated"),
             order: Some(Direction::Ascending),
             per_page: Some(100),
         };
@@ -301,7 +286,7 @@ mod tests {
 
         let issues = MOCK_CLIENT
             .search_issues(
-                SearchQueryBuilder::new().closed_on_or_after(
+                &mut SearchQueryBuilder::new().closed_on_or_after(
                     &FixedOffset::east(0)
                         .from_utc_datetime(&NaiveDate::from_ymd(2011, 4, 22).and_hms(13, 33, 48)),
                 ),
