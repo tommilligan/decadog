@@ -1,5 +1,3 @@
-use std::fmt::{self, Display};
-
 use chrono::{DateTime, Duration, FixedOffset, Local};
 use colored::Colorize;
 use decadog_core::github::{
@@ -20,13 +18,13 @@ lazy_static! {
 }
 
 struct SprintPoints {
-    planned: u32,
-    in_milestone: u32,
-    in_milestone_open: u32,
+    pub planned: u32,
+    pub in_milestone: u32,
+    pub in_milestone_open: u32,
 
-    done_in_sprint: u32,
-    done_out_of_sprint: u32,
-    done_total: u32,
+    pub done_in_sprint: u32,
+    pub done_out_of_sprint: u32,
+    pub done_total: u32,
 }
 
 impl SprintPoints {
@@ -56,27 +54,6 @@ impl SprintPoints {
             done_out_of_sprint,
             done_total,
         })
-    }
-}
-
-impl Display for SprintPoints {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            r#"Total done: {}
----
-Done in sprint: {}
-Done out of sprint: {}
-Planned: {}
-Planned but not done: {}
-Total in milestone: {}"#,
-            self.done_total,
-            self.done_in_sprint,
-            self.done_out_of_sprint,
-            self.planned,
-            self.in_milestone_open,
-            self.in_milestone,
-        )
     }
 }
 
@@ -433,7 +410,19 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         points_in_milestone_open,
     )?;
 
-    eprintln!("{}", &sprint_points);
+    eprintln!(
+        r#"*{}* Report
+---
+We completed *{}* planned points out of *{}* ({} remaining).
+We also did {} out of sprint points.
+In total, we finished *{} points* of work."#,
+        sprint.milestone.title,
+        sprint_points.done_in_sprint,
+        sprint_points.planned,
+        sprint_points.planned - sprint_points.done_in_sprint,
+        sprint_points.done_out_of_sprint,
+        sprint_points.done_total
+    );
     eprintln!();
 
     if Confirmation::new("Close sprint?").interact()? {
