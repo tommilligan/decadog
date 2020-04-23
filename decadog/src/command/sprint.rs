@@ -311,15 +311,25 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
     let sprint = client.get_sprint(&repository, open_milestone)?;
 
     println!();
-    println!("{}", "Issues closed in the sprint timeframe:".bold());
-    let closed_issues = client
+    println!("{}", "Issues for review:".bold());
+    let out_of_sprint_issues = client
         .search_issues(
             SearchQueryBuilder::new()
+                .no_milestone()
                 .closed_on_or_after(&sprint.start_date.start_date)
                 .not_label("Z-obsolete"),
         )?
         .collect::<Result<Vec<_>, _>>()?;
-    for issue in closed_issues.into_iter() {
+    let milestone_issues = client
+        .search_issues(
+            SearchQueryBuilder::new()
+                .milestone(&sprint.milestone.title)
+                .state(&State::Closed)
+                .not_label("Z-obsolete"),
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for issue in out_of_sprint_issues.into_iter().chain(milestone_issues) {
         // If assigned to a different milestone, ignore
         if let Some(milestone) = &issue.milestone {
             if milestone.id != sprint.milestone.id {
