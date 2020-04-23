@@ -293,6 +293,10 @@ impl SearchQueryBuilder {
         self.term(&format!(r#"milestone:"{}""#, milestone_title))
     }
 
+    pub fn no_milestone(&mut self) -> &mut Self {
+        self.key_value("no", "milestone")
+    }
+
     pub fn closed_on_or_after<Tz: TimeZone>(&mut self, datetime: &DateTime<Tz>) -> &mut Self
     where
         Tz::Offset: fmt::Display,
