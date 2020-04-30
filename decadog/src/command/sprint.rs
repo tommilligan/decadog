@@ -9,7 +9,7 @@ use lazy_static::lazy_static;
 use log::error;
 use structopt::StructOpt;
 
-use crate::interact::{Confirmation, FuzzySelect, Input, Select};
+use crate::interact::{Confirm, FuzzySelect, Input, Select};
 use crate::{error::Error, Settings};
 
 lazy_static! {
@@ -139,7 +139,7 @@ impl<'a> MilestoneManager<'a> {
             eprintln!("Already in milestone.");
         } else {
             // Otherwise, confirm the assignment
-            if Confirmation::new("Assign to milestone?").interact()? {
+            if Confirm::new("Assign to milestone?").interact()? {
                 self.client
                     .assign_issue_to_milestone(&issue, Some(&self.milestone))?;
             } else {
@@ -160,10 +160,10 @@ impl<'a> MilestoneManager<'a> {
 
         let update_assignment = if issue.assignees.is_empty() {
             // If we do not have an assignee, default to updating assignment
-            !Confirmation::new("Leave unassigned?").interact()?
+            !Confirm::new("Leave unassigned?").interact()?
         } else {
             // If we already have assignee(s), default to existing value
-            !Confirmation::new(&format!(
+            !Confirm::new(&format!(
                 "Assigned to {}; is this correct?",
                 issue
                     .assignees
@@ -243,7 +243,7 @@ fn create_sprint(settings: &Settings) -> Result<(), Error> {
     let client = Client::new(&settings.owner, &settings.repo, &github, &zenhub)?;
 
     // Select milestone to move tickets to
-    if Confirmation::new("Create sprint from today for two weeks?").interact()? {
+    if Confirm::new("Create sprint from today for two weeks?").interact()? {
         let sprint_number = Input::<String>::new()
             .with_prompt("Sprint number")
             .interact()?;
@@ -356,7 +356,7 @@ fn finish_sprint(settings: &Settings) -> Result<(), Error> {
         // If answer is no, ignore
         if issue.milestone.is_none() {
             show_description_once();
-            if Confirmation::new("Assign to milestone?").interact()? {
+            if Confirm::new("Assign to milestone?").interact()? {
                 client.assign_issue_to_milestone(&issue, Some(&sprint.milestone))?;
             } else {
                 continue;
@@ -435,7 +435,7 @@ In total, we finished *{} points* of work."#,
     );
     eprintln!();
 
-    if Confirmation::new("Close sprint?").interact()? {
+    if Confirm::new("Close sprint?").interact()? {
         // New title: Sprint <milestone_number> [<points done in sprint>/<points planned> + <points
         // done out of sprint>]
         let new_title = format!(

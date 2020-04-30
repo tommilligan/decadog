@@ -79,14 +79,14 @@ impl<'a, V> Select<'a, V> {
     }
 }
 
-pub struct Confirmation<'a> {
-    confirmation: dialoguer::Confirmation<'a>,
+pub struct Confirm<'a> {
+    confirmation: dialoguer::Confirm<'a>,
 }
 
-impl<'a> Confirmation<'a> {
+impl<'a> Confirm<'a> {
     pub fn new(text: &'a str) -> Self {
-        let mut confirmation = dialoguer::Confirmation::new();
-        confirmation.with_text(text);
+        let mut confirmation = dialoguer::Confirm::new();
+        confirmation.with_prompt(text);
 
         Self { confirmation }
     }
