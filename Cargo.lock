@@ -1686,9 +1686,9 @@ dependencies = [
 
 [[package]]
 name = "serde_test"
-version = "1.0.106"
+version = "1.0.112"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48f80694c19c256c75e68ef3240d078e73d7ed56e0f14300656f8b7b000f3852"
+checksum = "d326d93a77b25d5516844911b9df1d02375405a5b2671c1d23b0fbd9ac7af4f3"
 dependencies = [
  "serde",
 ]
